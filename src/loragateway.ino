@@ -13,10 +13,10 @@
 #include "Adafruit_MQTT_Client.h"
 #include "Wire.h"//th
 // WiFi access credentials
-#define  WIFI_SSID         "XXXXXXXXXXXXXXX"         // WiFi SSID
-#define  WIFI_PASSWORD     "XXXXXXXXXXXXXXX"         // WiFI Password
+#define  WIFI_SSID         "RepeaterWirelessNetwork"         // WiFi SSID
+#define  WIFI_PASSWORD     "ddeedddd"         // WiFI Password
 
-#define MQTT_PI_SERVER      "XX.XX.XX.XX"           // MQTT Queue Manager IP address
+#define MQTT_PI_SERVER      "192.168.2.254"           // MQTT Queue Manager IP address
 #define MQTT_PI_SERVER_PORT  1883                    // MQTT Port, use 8883 for SSL
 
 WiFiClient client;
@@ -34,7 +34,7 @@ DynamicJsonBuffer jsonBuffer;
 Adafruit_SSD1306 display(OLED_RESET);
 
 #if (SSD1306_LCDHEIGHT != 64)
-//#error("Height incorrect, please fix Adafruit_SSD1306.h!");
+//#error("Height incorrect, please fix Adafruit_SSD1306.h!");//th deleted
 #endif
 
 #define RFM95_CS 16
@@ -45,7 +45,7 @@ Adafruit_SSD1306 display(OLED_RESET);
 #define LED 5
 
 // Set radion frequency
-#define RF95_FREQ 433.0
+#define RF95_FREQ 434.0
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -57,7 +57,7 @@ Description :
 void setup() {
   Serial.begin(115200);
   _initOLED();
-  _initWiFi();
+  _initWiFi();//deleted th
   _initMQTT();
   _initLoRa();
 }
@@ -85,7 +85,7 @@ void loop() {
 
       Serial.println();
       Serial.println("Len==" + String(len));
-      //Serial.println("String(bufChar)==" + String(bufChar));
+      Serial.println("String(bufChar)==" + String(bufChar));
 
       ///////////////////////MQTT Code
       sendMessage(String(bufChar));
@@ -95,11 +95,11 @@ void loop() {
       uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
       rf95.send(outgoingData, sizeof(outgoingData));
       rf95.waitPacketSent();
-      //displayOnOLED("Sent a reply");
+      //Serial.println("Sent a reply");
       digitalWrite(LED, LOW);
     }
     else {
-      //displayOnOLED("Receive failed");
+      //Serial.println("Receive failed");
     }
   }
 }
@@ -143,9 +143,9 @@ void _initWiFi() {
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    displayOnOLED("Waiting for WiFi...");
+    Serial.println("Waiting for WiFi...");
   }
-  displayOnOLED("WiFi Connected!");
+  Serial.println("WiFi Connected!");
   delay(1000);
 
 }
@@ -159,7 +159,7 @@ void _initLoRa() {
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
-  displayOnOLED("LoRa RX WiFi Repeater");
+  Serial.println("LoRa RX WiFi Repeater");
   delay(1000);
 
   // manual reset
@@ -169,21 +169,26 @@ void _initLoRa() {
   delay(10);
 
   while (!rf95.init()) {
-    displayOnOLED("LoRa radio init failed");
+    Serial.println("LoRa radio init failed");
     while (1);
   }
-  displayOnOLED("LoRa radio init OK!");
+  Serial.println("LoRa radio init OK!");
   delay(1000);
 
   if (!rf95.setFrequency(RF95_FREQ)) {
-    displayOnOLED("setFrequency failed");
+    Serial.println("setFrequency failed");
     while (1);
   }
-  displayOnOLED("Freq set to 433 MHz");
+  Serial.println("Freq set");
   delay(1000);
 
-  rf95.setTxPower(5, false);
-  displayOnOLED("LoRa Listening...");
+  rf95.setTxPower(15, false);
+  rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);//th
+  rf95.printRegisters(); //th
+
+
+
+  Serial.println("LoRa Listening...");
   delay(1000);
 }
 
@@ -199,7 +204,7 @@ void _initMQTT() {
     return;
   }
 
-  displayOnOLED("Connecting to MQTT... ");
+  Serial.println("Connecting to MQTT... ");
 
   uint8_t retries = 3;
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
@@ -211,7 +216,7 @@ void _initMQTT() {
          while (1);
        }
   }
-  displayOnOLED("MQTT Connected!");
+  Serial.println("MQTT Connected!");
   delay(1000);
 }
 
@@ -229,8 +234,8 @@ void sendMessage(String msg) {
   s.toCharArray(charBuf, len);
 
   if (! telemetry.publish(charBuf)) {
-    displayOnOLED("Sending failed :(");
+    Serial.println("Sending failed :(");
   } else {
-    displayOnOLED("Message sent :)");
+    Serial.println("Message sent :)");
   }
 }
