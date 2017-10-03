@@ -20,12 +20,12 @@
 #define MQTT_PI_SERVER_PORT  1883                    // MQTT Port, use 8883 for SSL
 
 long batteryVoltageDecompress (byte batvoltage);
-
+float temperatureDeompress(byte temperature);
 
 WiFiClient client;
 
 Adafruit_MQTT_Client mqtt(&client, MQTT_PI_SERVER, MQTT_PI_SERVER_PORT);          // MQTT Client initialization
-Adafruit_MQTT_Publish telemetry = Adafruit_MQTT_Publish(&mqtt, "home/lora/json");  // MQTT Topic setup in publish mode
+Adafruit_MQTT_Publish telemetry = Adafruit_MQTT_Publish(&mqtt, "lora/temp");  // MQTT Topic setup in publish mode
 
 
 // JSON Buffer
@@ -57,7 +57,8 @@ RH_RF95 rf95(RFM95_CS, RFM95_INT);
 struct payloadDataStruct{
   byte nodeID;
   byte rssi;
-  int voltage;
+  byte voltage;
+  byte temperature;
 }rxpayload;
 
 /*struct payloadDataStruct{
@@ -107,11 +108,14 @@ void loop() {
       memcpy(&rxpayload, buf, sizeof(rxpayload));
       //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
       Serial.print(" nodeID = ");Serial.print(rxpayload.nodeID);
-      Serial.print(" remote voltage = ");Serial.print(rxpayload.voltage);
+      Serial.print(" remote voltage comp = ");Serial.print((rxpayload.voltage));
+      Serial.print(" remote voltage = ");Serial.print(batteryVoltageDecompress(rxpayload.voltage));
       Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
 
       ///////////////////////MQTT Code
-      sendMessage(String(bufChar));
+      //sendMessage(String(bufChar));
+      sendMessage(String(temperatureDeompress(rxpayload.temperature)));
+
       //////////////////////////////////
 
       // Send a reply
@@ -248,9 +252,10 @@ Function : sendMessage()
 Description : Send message to the MQTT Server
 ------------------------------------------------------------------------------*/
 void sendMessage(String msg) {
-  String s = "{ \"M\":";
+  String s;
+  //String s = "{ \"M\":";
   s += msg;
-  s += " }}";
+  //s += " }}";
 
   int len = s.length();
   char charBuf[len];
@@ -263,7 +268,15 @@ void sendMessage(String msg) {
   }
 }
 long batteryVoltageDecompress (byte batvoltage) {
+//decompress voltage from 1 byte
 long result2;
-result2 =  (batvoltage + 1000L)*10;
+result2 =  (batvoltage*8)+1300;
 return (result2);
+}
+
+float temperatureDeompress(byte temperature){
+float result2;
+result2=((float)temperature)/5;
+//result2=(float)temperature;
+return result2;
 }
