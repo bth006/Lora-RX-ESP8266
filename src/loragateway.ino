@@ -19,6 +19,9 @@
 #define MQTT_PI_SERVER      "192.168.2.254"           // MQTT Queue Manager IP address
 #define MQTT_PI_SERVER_PORT  1883                    // MQTT Port, use 8883 for SSL
 
+long batteryVoltageDecompress (byte batvoltage);
+
+
 WiFiClient client;
 
 Adafruit_MQTT_Client mqtt(&client, MQTT_PI_SERVER, MQTT_PI_SERVER_PORT);          // MQTT Client initialization
@@ -50,6 +53,20 @@ Adafruit_SSD1306 display(OLED_RESET);
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
+
+struct payloadDataStruct{
+  byte nodeID;
+  byte rssi;
+  int voltage;
+}rxpayload;
+
+/*struct payloadDataStruct{
+int voltage;
+
+  byte rssi;
+  byte nodeID;
+}rxpayload;
+*/
 /*----------------------------------------------------------------------------
 Function : setup()
 Description :
@@ -86,6 +103,12 @@ void loop() {
       Serial.println();
       Serial.println("Len==" + String(len));
       Serial.println("String(bufChar)==" + String(bufChar));
+
+      memcpy(&rxpayload, buf, sizeof(rxpayload));
+      //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
+      Serial.print(" nodeID = ");Serial.print(rxpayload.nodeID);
+      Serial.print(" remote voltage = ");Serial.print(rxpayload.voltage);
+      Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
 
       ///////////////////////MQTT Code
       sendMessage(String(bufChar));
@@ -238,4 +261,9 @@ void sendMessage(String msg) {
   } else {
     Serial.println("Message sent :)");
   }
+}
+long batteryVoltageDecompress (byte batvoltage) {
+long result2;
+result2 =  (batvoltage + 1000L)*10;
+return (result2);
 }
