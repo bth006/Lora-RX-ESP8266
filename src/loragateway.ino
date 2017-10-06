@@ -13,8 +13,8 @@
 #include "Adafruit_MQTT_Client.h"
 #include "Wire.h"//th
 // WiFi access credentials
-#define  WIFI_SSID         "RepeaterWirelessNetwork"         // WiFi SSID
-#define  WIFI_PASSWORD     "ddeedddd"         // WiFI Password
+#define  WIFI_SSID         "Penryn"         // WiFi SSID
+#define  WIFI_PASSWORD     "hoooverr"         // WiFI Password
 
 #define MQTT_PI_SERVER      "192.168.2.254"           // MQTT Queue Manager IP address
 #define MQTT_PI_SERVER_PORT  1883                    // MQTT Port, use 8883 for SSL
@@ -73,9 +73,9 @@ Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(57600);
   _initOLED();
-  _initWiFi();//deleted th
+  _initWiFi();
   _initMQTT();
   _initLoRa();
 }
@@ -119,8 +119,17 @@ void loop() {
       //////////////////////////////////
 
       // Send a reply
-      uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
-      rf95.send(outgoingData, sizeof(outgoingData));
+      //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
+
+      uint8_t ack[1];
+      // the acknolement consists of an ack identiferer followed by nodeID
+      ack[0]=(uint8_t)170; //ack identifier 170=10101010
+      ack[1]= (uint8_t)rxpayload.nodeID;
+
+
+      //uint8_t outgoingData[] = {rxpayload.nodeID};
+      rf95.send(ack, 2);
+      //rf95.send(outgoingData, sizeof(outgoingData));
       rf95.waitPacketSent();
       //Serial.println("Sent a reply");
       digitalWrite(LED, LOW);
@@ -209,7 +218,7 @@ void _initLoRa() {
   Serial.println("Freq set");
   delay(1000);
 
-  rf95.setTxPower(15, false);
+  rf95.setTxPower(11, false);
   rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);//th
   rf95.printRegisters(); //th
 
@@ -263,8 +272,9 @@ void sendMessage(String msg) {
 
   if (! telemetry.publish(charBuf)) {
     Serial.println("Sending failed :(");
+    Serial.print("mqtt connected=");Serial.println(mqtt.connected());
   } else {
-    Serial.println("Message sent :)");
+    Serial.println(" mqtt sent :)");
   }
 }
 long batteryVoltageDecompress (byte batvoltage) {
@@ -275,6 +285,8 @@ return (result2);
 }
 
 float temperatureDeompress(byte temperature){
+  //decomcompress temperature from 1 byte
+  // allowable temperature range is 0 to 51 degree C
 float result2;
 result2=((float)temperature)/5;
 //result2=(float)temperature;
