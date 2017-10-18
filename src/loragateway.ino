@@ -12,6 +12,7 @@
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
 #include "Wire.h"//th
+#include "UbidotsMicroESP8266.h"
 // WiFi access credentials
 #define  WIFI_SSID         "Penryn"         // WiFi SSID
 #define  WIFI_PASSWORD     "hoooverr"         // WiFI Password
@@ -19,10 +20,15 @@
 #define MQTT_PI_SERVER      "192.168.2.254"           // MQTT Queue Manager IP address
 #define MQTT_PI_SERVER_PORT  1883                    // MQTT Port, use 8883 for SSL
 
+#define TOKEN  "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171"  // Put here your Ubidots TOKEN
+#define ID_1 "59d85600c03f97202c9ff2c0" // Put your variable ID here
+
 long batteryVoltageDecompress (byte batvoltage);
 float temperatureDeompress(byte temperature);
 
 WiFiClient client;
+
+Ubidots client2(TOKEN,"client2");
 
 Adafruit_MQTT_Client mqtt(&client, MQTT_PI_SERVER, MQTT_PI_SERVER_PORT);          // MQTT Client initialization
 Adafruit_MQTT_Publish telemetry = Adafruit_MQTT_Publish(&mqtt, "lora/temp");  // MQTT Topic setup in publish mode
@@ -73,6 +79,8 @@ Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
+client2.setDebug(true); // Uncomment this line to set DEBUG on
+
   Serial.begin(57600);
   _initOLED();
   _initWiFi();
@@ -111,12 +119,19 @@ void loop() {
       Serial.print(" remote voltage comp = ");Serial.print((rxpayload.voltage));
       Serial.print(" remote voltage = ");Serial.print(batteryVoltageDecompress(rxpayload.voltage));
       Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
+      Serial.print(" Local RSSI: ");Serial.print(rf95.lastRssi(), DEC);
+
 
       ///////////////////////MQTT Code
       //sendMessage(String(bufChar));
       sendMessage(String(temperatureDeompress(rxpayload.temperature)));
 
       //////////////////////////////////
+  client2.add("59d864b6c03f972cdb9e33e6", rxpayload.rssi);
+  client2.add("59dee274c03f976a87c2594b", rf95.lastRssi());
+   client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
+client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
+   client2.sendAll(false);
 
       // Send a reply
       //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
@@ -218,7 +233,7 @@ void _initLoRa() {
   Serial.println("Freq set");
   delay(1000);
 
-  rf95.setTxPower(11, false);
+  rf95.setTxPower(17, false);
   rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);//th
   rf95.printRegisters(); //th
 
