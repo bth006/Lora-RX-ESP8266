@@ -25,6 +25,7 @@
 
 long batteryVoltageDecompress (byte batvoltage);
 float temperatureDeompress(byte temperature);
+unsigned int Combine2bytes(byte x_high, byte x_low);
 
 WiFiClient client;
 
@@ -65,6 +66,8 @@ struct payloadDataStruct{
   byte rssi;
   byte voltage;
   byte temperature;
+  byte capsensorLowbyte;
+  byte capsensorHighbyte;
 }rxpayload;
 
 /*struct payloadDataStruct{
@@ -120,6 +123,7 @@ void loop() {
       Serial.print(" remote voltage = ");Serial.print(batteryVoltageDecompress(rxpayload.voltage));
       Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
       Serial.print(" Local RSSI: ");Serial.print(rf95.lastRssi(), DEC);
+      Serial.print(" cap= ");Serial.print(Combine2bytes(rxpayload.capsensorHighbyte,rxpayload.capsensorLowbyte));
 
 
       ///////////////////////MQTT Code
@@ -127,11 +131,12 @@ void loop() {
       sendMessage(String(temperatureDeompress(rxpayload.temperature)));
 
       //////////////////////////////////
-  client2.add("59d864b6c03f972cdb9e33e6", rxpayload.rssi);
-  client2.add("59dee274c03f976a87c2594b", rf95.lastRssi());
-   client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
-client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
-   client2.sendAll(false);
+     client2.add("59d864b6c03f972cdb9e33e6", (int)rxpayload.rssi);
+     client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
+     client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
+     client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
+     client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensorHighbyte,rxpayload.capsensorLowbyte));
+     client2.sendAll(false);
 
       // Send a reply
       //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
@@ -306,4 +311,13 @@ float result2;
 result2=((float)temperature)/5;
 //result2=(float)temperature;
 return result2;
+}
+
+unsigned int Combine2bytes(byte x_high, byte x_low)
+//convert high and low bytes to unsigned int (0-65,535 (2^16) - 1)
+{
+unsigned int combined;
+  if ((x_high >=256) & (x_low>=256)) combined =0; ///out of range
+  combined = x_low | x_high << 8;
+  return combined;
 }
