@@ -125,13 +125,12 @@ void loop() {
       Serial.print(" Local RSSI: ");Serial.print(rf95.lastRssi(), DEC);
       Serial.print(" cap= ");Serial.print(Combine2bytes(rxpayload.capsensorHighbyte,rxpayload.capsensorLowbyte));
 
-
       ///////////////////////MQTT Code
       //sendMessage(String(bufChar));
       sendMessage(String(temperatureDeompress(rxpayload.temperature)));
 
       //////////////////////////////////
-     client2.add("59d864b6c03f972cdb9e33e6", (int)rxpayload.rssi);
+     client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
      client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
      client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
      client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
