@@ -101,7 +101,7 @@ void loop() {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-
+    _initMQTT(); //temporary fix
     if (rf95.recv(buf, &len)) {
       digitalWrite(LED, HIGH);
       delay(10);
