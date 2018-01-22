@@ -66,8 +66,12 @@ struct payloadDataStruct{
   byte rssi;
   byte voltage;
   byte temperature;
-  byte capsensorLowbyte;
-  byte capsensorHighbyte;
+  byte capsensor1Lowbyte;
+  byte capsensor1Highbyte;
+  byte capsensor2Lowbyte;
+  byte capsensor2Highbyte;
+  //byte capsensor3Lowbyte;
+  //byte capsensor3Highbyte
 }rxpayload;
 
 /*struct payloadDataStruct{
@@ -123,8 +127,8 @@ void loop() {
       Serial.print(" remote voltage = ");Serial.print(batteryVoltageDecompress(rxpayload.voltage));
       Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
       Serial.print(" Local RSSI: ");Serial.print(rf95.lastRssi(), DEC);
-      Serial.print(" cap= ");Serial.print(Combine2bytes(rxpayload.capsensorHighbyte,rxpayload.capsensorLowbyte));
-
+      Serial.print(" cap1= ");Serial.print(Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
+      Serial.print(" cap2= ");Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
       ///////////////////////MQTT Code
       //sendMessage(String(bufChar));
       sendMessage(String(temperatureDeompress(rxpayload.temperature)));
@@ -134,7 +138,9 @@ void loop() {
      client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
      client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
      client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
-     client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensorHighbyte,rxpayload.capsensorLowbyte));
+     client2.sendAll(false);
+     client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
+     client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
      client2.sendAll(false);
 
       // Send a reply
