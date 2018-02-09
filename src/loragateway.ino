@@ -5,20 +5,15 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+
 #include <RH_RF95.h>
 #include <ArduinoJson.h>
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
 #include "Wire.h"//th
 #include "UbidotsMicroESP8266.h"
 // WiFi access credentials
 #define  WIFI_SSID         "Penryn"         // WiFi SSID
 #define  WIFI_PASSWORD     "hoooverr"         // WiFI Password
 
-#define MQTT_PI_SERVER      "192.168.2.254"           // MQTT Queue Manager IP address
-#define MQTT_PI_SERVER_PORT  1883                    // MQTT Port, use 8883 for SSL
 
 #define TOKEN  "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171"  // Put here your Ubidots TOKEN
 #define ID_1 "59d85600c03f97202c9ff2c0" // Put your variable ID here
@@ -31,21 +26,11 @@ WiFiClient client;
 
 Ubidots client2(TOKEN,"client2");
 
-Adafruit_MQTT_Client mqtt(&client, MQTT_PI_SERVER, MQTT_PI_SERVER_PORT);          // MQTT Client initialization
-Adafruit_MQTT_Publish telemetry = Adafruit_MQTT_Publish(&mqtt, "lora/temp");  // MQTT Topic setup in publish mode
-
 
 // JSON Buffer
 DynamicJsonBuffer jsonBuffer;
 
 
-#define OLED_RESET 2
-// Instance of the display
-Adafruit_SSD1306 display(OLED_RESET);
-
-#if (SSD1306_LCDHEIGHT != 64)
-//#error("Height incorrect, please fix Adafruit_SSD1306.h!");//th deleted
-#endif
 
 #define RFM95_CS 16
 #define RFM95_RST 0
@@ -89,9 +74,7 @@ void setup() {
 client2.setDebug(true); // Uncomment this line to set DEBUG on
 
   Serial.begin(57600);
-  _initOLED();
   _initWiFi();
-  _initMQTT();
   _initLoRa();
 }
 
@@ -105,7 +88,6 @@ void loop() {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-    _initMQTT(); //temporary fix
     if (rf95.recv(buf, &len)) {
       digitalWrite(LED, HIGH);
       delay(10);
@@ -131,7 +113,7 @@ void loop() {
       Serial.print(" cap2= ");Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
       ///////////////////////MQTT Code
       //sendMessage(String(bufChar));
-      sendMessage(String(temperatureDeompress(rxpayload.temperature)));
+
 
       //////////////////////////////////
      client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
@@ -165,29 +147,6 @@ void loop() {
   }
 }
 
-/*----------------------------------------------------------------------------
-Function : displayOnOLED()
-Description : Subroutine to display text on the OLED
-------------------------------------------------------------------------------*/
-void displayOnOLED (String data) {
-  display.setCursor(0,0);
-  display.clearDisplay();
-  display.print(data);
-  display.display();
-}
-
-/*----------------------------------------------------------------------------
-Function : _initOLED ()
-Description : Subroutine to initialize the OLED Display
-------------------------------------------------------------------------------*/
-void _initOLED () {
-  //Initialize the display
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3D);  // initialize with the I2C addr 0x3D (for the 128x64)
-  display.setRotation(2);
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.clearDisplay();
-}
 
 void donothing() {
 }
@@ -199,8 +158,7 @@ Description : Connect to WiFi access point
 void _initWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  display.setCursor(0,0);
-  display.clearDisplay();
+
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -253,55 +211,6 @@ void _initLoRa() {
   delay(1000);
 }
 
-/*----------------------------------------------------------------------------
-Function : _initMQTT()
-Description : Connect to MQTT Queue Manager
-------------------------------------------------------------------------------*/
-void _initMQTT() {
-  int8_t ret;
-
-  // Stop if already connected.
-  if (mqtt.connected()) {
-    return;
-  }
-
-  Serial.println("Connecting to MQTT... ");
-
-  uint8_t retries = 3;
-  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
-       mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
-       retries--;
-       if (retries == 0) {
-         // basically die and wait for WDT to reset me
-         while (1);
-       }
-  }
-  Serial.println("MQTT Connected!");
-  delay(1000);
-}
-
-/*----------------------------------------------------------------------------
-Function : sendMessage()
-Description : Send message to the MQTT Server
-------------------------------------------------------------------------------*/
-void sendMessage(String msg) {
-  String s;
-  //String s = "{ \"M\":";
-  s += msg;
-  //s += " }}";
-
-  int len = s.length();
-  char charBuf[len];
-  s.toCharArray(charBuf, len);
-
-  if (! telemetry.publish(charBuf)) {
-    Serial.println("Sending failed :(");
-    Serial.print("mqtt connected=");Serial.println(mqtt.connected());
-  } else {
-    Serial.println(" mqtt sent :)");
-  }
-}
 long batteryVoltageDecompress (byte batvoltage) {
 //decompress voltage from 1 byte
 long result2;
