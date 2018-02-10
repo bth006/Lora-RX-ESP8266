@@ -3,8 +3,9 @@
 // March 2017
 
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-#include <ESP8266HTTPClient.h>
+#include <PubSubClient.h>
+//#include <ESP8266WiFiMulti.h>
+//#include <ESP8266HTTPClient.h>
 
 #include <RH_RF95.h>
 #include <ArduinoJson.h>
@@ -18,19 +19,38 @@
 #define TOKEN  "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171"  // Put here your Ubidots TOKEN
 #define ID_1 "59d85600c03f97202c9ff2c0" // Put your variable ID here
 
+WiFiClient wificlient;
+
+/****************************************
+ * MQTT
+ ****************************************/
+void ubidotsmqtt(char topic, char varable, char value);
+#define VARIABLE_LABEL "MQTTsensor2" // Assing the variable label
+#define DEVICE_LABEL "esp" // Assig the device label
+#define MQTT_CLIENT_NAME "OLtBrXVH6i" // MQTT client Name, please enter your own 8-12 alphanumeric character ASCII string;
+char mqttBroker[]  = "things.ubidots.com";
+char payload[100];
+char topic[150];
+// Space to store values to send
+char str_sensor[10];
+
+PubSubClient client(wificlient);
+
+void callback(char* topic, byte* payload, unsigned int length);
+void reconnect();
+/*****************************************/
+
+
 long batteryVoltageDecompress (byte batvoltage);
 float temperatureDeompress(byte temperature);
 unsigned int Combine2bytes(byte x_high, byte x_low);
 
-WiFiClient client;
+
 
 Ubidots client2(TOKEN,"client2");
 
-
 // JSON Buffer
 DynamicJsonBuffer jsonBuffer;
-
-
 
 #define RFM95_CS 16
 #define RFM95_RST 0
@@ -39,7 +59,7 @@ DynamicJsonBuffer jsonBuffer;
 // Blinky on receipt
 #define LED 5
 
-// Set radion frequency
+// Set radio frequency
 #define RF95_FREQ 434.0
 
 // Singleton instance of the radio driver
@@ -74,8 +94,13 @@ void setup() {
 client2.setDebug(true); // Uncomment this line to set DEBUG on
 
   Serial.begin(57600);
+  delay(1000);
   _initWiFi();
   _initLoRa();
+
+  client.setServer(mqttBroker, 1883);
+  client.setCallback(callback);
+  _checkWifi_mqtt();
 }
 
 
@@ -84,6 +109,7 @@ Function : loop()
 Description : Main program loop
 ------------------------------------------------------------------------------*/
 void loop() {
+
   if (rf95.available()) {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
@@ -103,6 +129,8 @@ void loop() {
       Serial.println("String(bufChar)==" + String(bufChar));
 
       memcpy(&rxpayload, buf, sizeof(rxpayload));
+      _checkWifi_mqtt();
+
       //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
       Serial.print(" nodeID = ");Serial.print(rxpayload.nodeID);
       Serial.print(" remote voltage comp = ");Serial.print((rxpayload.voltage));
@@ -116,7 +144,11 @@ void loop() {
 
 
       //////////////////////////////////
-     client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
+      float sensor = -rxpayload.rssi;
+      dtostrf(sensor, 4, 2, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+        ubidotsmqtt("rssi", str_sensor);
+
+     //client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
      client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
      client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
      client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
@@ -145,6 +177,9 @@ void loop() {
       //Serial.println("Receive failed");
     }
   }
+  client.loop();//Mqtt
+delay(100);
+
 }
 
 
@@ -157,18 +192,38 @@ Description : Connect to WiFi access point
 ------------------------------------------------------------------------------*/
 void _initWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-
-
-  while (WiFi.status() != WL_CONNECTED) {
+Serial.println("WiFi Connecting");
+for (int waiting=0; waiting <= 40; waiting++){
+  if (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.println("Waiting for WiFi...");
+    Serial.println(" Waiting for WiFi...");
+    Serial.println(waiting);
   }
-  Serial.println("WiFi Connected!");
-  delay(1000);
 
+  delay(1000);
 }
 
+if (WiFi.status() == WL_CONNECTED) {
+  Serial.println("WiFi Connected!");
+}
+}
+
+
+void _checkWifi_mqtt() {
+if (WiFi.status() != WL_CONNECTED) {
+  //WiFi.disconnect();
+  delay(100);
+  Serial.print(" reconnecting wifi");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  delay(1000);
+  //client.connect(MQTT_CLIENT_NAME, TOKEN, "")
+}
+if (!client.connected()) {
+    Serial.println("reconecting/connecting mqtt");
+    reconnect();
+    }
+
+}
 /*----------------------------------------------------------------------------
 Function : _initLoRa()
 Description : Connect to WiFi access point
@@ -234,4 +289,54 @@ unsigned int combined;
   if ((x_high >=256) & (x_low>=256)) combined =0; ///out of range
   combined = x_low | x_high << 8;
   return combined;
+}
+
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  char p[length + 1];
+  memcpy(p, payload, length);
+  p[length] = NULL;
+  String message(p);
+  Serial.write(payload, length);
+  Serial.println(topic);
+}
+
+void reconnect() {
+  // Loop a few times until we're reconnected
+  int attempts=10;
+  while (!client.connected()) {
+    if (attempts<=0) break;
+    attempts = attempts-1;
+    Serial.println("Attempting MQTT connection...");
+
+    // Attemp to connect MQTT
+    if (client.connect(MQTT_CLIENT_NAME, TOKEN, "")) {
+      Serial.println("Connected");
+    } else {
+      Serial.print("Failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 2 seconds");
+      // Wait 2 seconds before retrying
+      delay(2000);
+    }
+  }
+}
+
+void ubidotsmqtt(char* varable, char* value){
+///PubSubClient
+sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
+
+sprintf(payload, "%s", ""); // Cleans the payload
+//sprintf(payload, "{\"%s\":", VARIABLE_LABEL); // Adds the variable label
+
+//sprintf(payload, "%s {\"value\": %s}}", payload, str_sensor);
+sprintf(payload, "%s {\"%s\": %s}", payload, varable,str_sensor);// Adds the value
+Serial.println("Publishing data to Ubidots Cloud");
+Serial.println("t= ");Serial.println(topic);
+Serial.println(" p= ");Serial.println(payload);
+client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
+
+//example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
+
+///end pubsub
 }
