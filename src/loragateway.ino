@@ -24,7 +24,8 @@ WiFiClient wificlient;
 /****************************************
  * MQTT
  ****************************************/
-void ubidotsmqtt(char topic, char varable, char value);
+void ubidotsmqttSingle(char topic, char varable, char value);
+void ubidotsmqttJson(char* varable1, int value1, char* varable2, int value2, char* varable3, int value3);
 #define VARIABLE_LABEL "MQTTsensor2" // Assing the variable label
 #define DEVICE_LABEL "esp" // Assig the device label
 #define MQTT_CLIENT_NAME "OLtBrXVH6i" // MQTT client Name, please enter your own 8-12 alphanumeric character ASCII string;
@@ -109,7 +110,7 @@ Function : loop()
 Description : Main program loop
 ------------------------------------------------------------------------------*/
 void loop() {
-
+//client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
   if (rf95.available()) {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
@@ -146,12 +147,14 @@ void loop() {
       //////////////////////////////////
       float sensor = -rxpayload.rssi;
       dtostrf(sensor, 4, 2, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-        ubidotsmqtt("rssi", str_sensor);
 
+        ubidotsmqttJson("voltage", batteryVoltageDecompress(rxpayload.voltage),
+        "rssi", -rxpayload.rssi, "temp", temperatureDeompress(rxpayload.temperature));
+         ubidotsmqttSingle("rssi", str_sensor);
      //client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
      client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
-     client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
-     client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
+     //client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
+     //client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
      client2.sendAll(false);
      client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
      client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
@@ -178,7 +181,7 @@ void loop() {
     }
   }
   client.loop();//Mqtt
-delay(100);
+delay(10000);
 
 }
 
@@ -322,21 +325,57 @@ void reconnect() {
   }
 }
 
-void ubidotsmqtt(char* varable, char* value){
-///PubSubClient
+void ubidotsmqttSingle(char* varable, char* value){
+//format topic and payload, then publish single data point
 sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
 
 sprintf(payload, "%s", ""); // Cleans the payload
-//sprintf(payload, "{\"%s\":", VARIABLE_LABEL); // Adds the variable label
-
-//sprintf(payload, "%s {\"value\": %s}}", payload, str_sensor);
-sprintf(payload, "%s {\"%s\": %s}", payload, varable,str_sensor);// Adds the value
-Serial.println("Publishing data to Ubidots Cloud");
-Serial.println("t= ");Serial.println(topic);
-Serial.println(" p= ");Serial.println(payload);
+sprintf(payload, "%s {\"%s\": %s}", payload, varable, value);// Adds the value
+Serial.print("Publishing data to Ubidots Cloud");
+Serial.print(" topic= ");Serial.println(topic);
+Serial.println(" payload= ");Serial.println(payload);
 client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
 
 //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
 
-///end pubsub
+}
+
+
+void ubidotsmqttTriple(char* varable1, int value1, char* varable2, char* value2, char* varable3, char* value3){
+//format topic and payload, then publish single data point
+sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
+char str_value1[10];
+char str_value2[10];
+char str_value3[10];
+dtostrf(value1, 4, 2, str_value1);
+
+sprintf(payload, "%s", ""); // Cleans the payload
+//sprintf(payload, "%s {\"%s\": %s}", payload, varable, value);// Adds the value
+sprintf(payload, "%s {\"%s\": %s\", \"%s\": %s, \"%s\": %s}", payload, varable1, value1, varable2, value2, varable3, value3);// Adds the value
+Serial.print("Publishing data to Ubidots Cloud");
+Serial.print(" topic= ");Serial.println(topic);
+Serial.println(" payload= ");Serial.println(payload);
+client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
+
+//example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
+
+}
+
+void ubidotsmqttJson(char* varable1, int value1, char* varable2, int value2, char* varable3, int value3){
+
+  StaticJsonBuffer<100> jsonBuffer;
+  char JSONmessageBuffer[100];
+  JsonObject& root = jsonBuffer.createObject();
+
+  root[varable1] = value1;
+  root[varable2] = value2;
+  root[varable3] = value3;
+
+root.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+Serial.println(JSONmessageBuffer);
+sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
+Serial.print("Publishing data to Ubidots Cloud");
+Serial.print(" topic= ");Serial.println(topic);
+Serial.println(" payload= ");Serial.println(JSONmessageBuffer);
+client.publish(topic, JSONmessageBuffer);
 }
