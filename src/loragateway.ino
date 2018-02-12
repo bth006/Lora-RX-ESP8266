@@ -2,7 +2,7 @@
 // Author : Tanmoy Dutta
 // March 2017
 
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <PubSubClient.h>
 //#include <ESP8266WiFiMulti.h>
 //#include <ESP8266HTTPClient.h>
@@ -10,7 +10,7 @@
 #include <RH_RF95.h>
 #include <ArduinoJson.h>
 #include "Wire.h"//th
-#include "UbidotsMicroESP8266.h"
+//#include "UbidotsMicroESP8266.h"
 // WiFi access credentials
 #define  WIFI_SSID         "Penryn"         // WiFi SSID
 #define  WIFI_PASSWORD     "hoooverr"         // WiFI Password
@@ -24,7 +24,7 @@ WiFiClient wificlient;
 /****************************************
  * MQTT
  ****************************************/
-void ubidotsmqttSingle(char topic, char varable, char value);
+void ubidotsmqttSingle(char const* varable, char const* value);
 void ubidotsmqttJson(char* varable1, int value1, char* varable2, int value2, char* varable3, int value3);
 #define VARIABLE_LABEL "MQTTsensor2" // Assing the variable label
 #define DEVICE_LABEL "esp" // Assig the device label
@@ -48,17 +48,17 @@ unsigned int Combine2bytes(byte x_high, byte x_low);
 
 
 
-Ubidots client2(TOKEN,"client2");
+//Ubidots client2(TOKEN,"client2");
 
 // JSON Buffer
 DynamicJsonBuffer jsonBuffer;
 
-#define RFM95_CS 16
-#define RFM95_RST 0
-#define RFM95_INT 15
+#define RFM95_CS 18
+#define RFM95_RST 14
+#define RFM95_INT 26
 
 // Blinky on receipt
-#define LED 5
+#define LED 2
 
 // Set radio frequency
 #define RF95_FREQ 434.0
@@ -92,7 +92,7 @@ Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
-client2.setDebug(true); // Uncomment this line to set DEBUG on
+//client2.setDebug(true); // Uncomment this line to set DEBUG on
 
   Serial.begin(57600);
   delay(1000);
@@ -145,20 +145,24 @@ void loop() {
 
 
       //////////////////////////////////
-      float sensor = -rxpayload.rssi;
-      dtostrf(sensor, 4, 2, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+      float sensor = rxpayload.voltage;
+      dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+      ubidotsmqttSingle("voltage", str_sensor);
 
-        ubidotsmqttJson("voltage", batteryVoltageDecompress(rxpayload.voltage),
+        ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
         "rssi", -rxpayload.rssi, "temp", temperatureDeompress(rxpayload.temperature));
-         ubidotsmqttSingle("rssi", str_sensor);
-     //client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
+
+        ubidotsmqttJson("level-1", (int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte),
+         "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte), "temp", temperatureDeompress(rxpayload.temperature));
+
+     /*client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
      client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
-     //client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
-     //client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
+     client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
+     client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
      client2.sendAll(false);
      client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
      client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
-     client2.sendAll(false);
+     client2.sendAll(false);*/
 
       // Send a reply
       //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
@@ -325,7 +329,7 @@ void reconnect() {
   }
 }
 
-void ubidotsmqttSingle(char* varable, char* value){
+void ubidotsmqttSingle(char const* varable, char const* value){
 //format topic and payload, then publish single data point
 sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
 
