@@ -1,7 +1,6 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
 // March 2017
-
 #include <WiFi.h>
 #include <PubSubClient.h>
 //#include <ESP8266WiFiMulti.h>
@@ -9,7 +8,7 @@
 
 #include <RH_RF95.h>
 #include <ArduinoJson.h>
-#include "Wire.h"//th
+//#include "Wire.h"//th
 //#include "UbidotsMicroESP8266.h"
 // WiFi access credentials
 #define  WIFI_SSID         "Penryn"         // WiFi SSID
@@ -247,11 +246,11 @@ void _initLoRa() {
   digitalWrite(RFM95_RST, LOW);
   delay(10);
   digitalWrite(RFM95_RST, HIGH);
-  delay(10);
-
+  delay(100);
+rf95.printRegisters(); //th
   while (!rf95.init()) {
     Serial.println("LoRa radio init failed");
-    while (1);
+    //while (1);//th
   }
   Serial.println("LoRa radio init OK!");
   delay(1000);
