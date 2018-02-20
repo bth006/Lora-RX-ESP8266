@@ -7,6 +7,7 @@
 //#include <ESP8266HTTPClient.h>
 
 #include <RH_RF95.h>
+#include "RadioSettings.h"
 #include <ArduinoJson.h>
 //#include "Wire.h"//th
 //#include "UbidotsMicroESP8266.h"
@@ -39,7 +40,9 @@ PubSubClient client(wificlient);
 void callback(char* topic, byte* payload, unsigned int length);
 void reconnect();
 /*****************************************/
-
+void _initLoRa();
+void _initWiFi();
+void _checkWifi_mqtt();
 
 long batteryVoltageDecompress (byte batvoltage);
 float temperatureDeompress(byte temperature);
@@ -57,7 +60,7 @@ DynamicJsonBuffer jsonBuffer;
 #define RFM95_INT 26
 
 // Blinky on receipt
-#define LED 2
+#define BUILTIN_BLUE_LED 2
 
 // Set radio frequency
 #define RF95_FREQ 434.0
@@ -65,6 +68,10 @@ DynamicJsonBuffer jsonBuffer;
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
+static const RH_RF95::ModemConfig radiosetting = {
+    BW_SETTING<<4 | CR_SETTING<<1 | ImplicitHeaderMode_SETTING,
+    SF_SETTING<<4 | CRC_SETTING<<2,
+    LowDataRateOptimize_SETTING<<3 | ACGAUTO_SETTING<<2};
 
 struct payloadDataStruct{
   byte nodeID;
@@ -92,15 +99,26 @@ Description :
 ------------------------------------------------------------------------------*/
 void setup() {
 //client2.setDebug(true); // Uncomment this line to set DEBUG on
+//set up 1HZ pwm on LED
+pinMode(BUILTIN_BLUE_LED, OUTPUT);
+ledcSetup(0, 1, 8);//pwm channel 0. 1Hz, 8 bit resolution
+ledcAttachPin(BUILTIN_BLUE_LED, 0);//attach LED to PWN channel 0
+ledcWrite(0, 0);//led off
 
   Serial.begin(57600);
   delay(1000);
-  _initWiFi();
   _initLoRa();
+
+  rf95.setModemRegisters(&radiosetting);
+  _initWiFi();
+
+  Serial.print(" CPU");Serial.print(F_CPU/1000000,DEC);
+  Serial.println(F(" MHz"));
 
   client.setServer(mqttBroker, 1883);
   client.setCallback(callback);
   _checkWifi_mqtt();
+
 }
 
 
@@ -110,12 +128,13 @@ Description : Main program loop
 ------------------------------------------------------------------------------*/
 void loop() {
 //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
+//rf95.printRegisters(); //th
+
   if (rf95.available()) {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
     if (rf95.recv(buf, &len)) {
-      digitalWrite(LED, HIGH);
       delay(10);
 
       char bufChar[len];
@@ -129,7 +148,7 @@ void loop() {
       Serial.println("String(bufChar)==" + String(bufChar));
 
       memcpy(&rxpayload, buf, sizeof(rxpayload));
-      _checkWifi_mqtt();
+
 
       //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
       Serial.print(" nodeID = ");Serial.print(rxpayload.nodeID);
@@ -137,22 +156,44 @@ void loop() {
       Serial.print(" remote voltage = ");Serial.print(batteryVoltageDecompress(rxpayload.voltage));
       Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
       Serial.print(" Local RSSI: ");Serial.print(rf95.lastRssi(), DEC);
+      Serial.print(" Local SNR: ");Serial.print(rf95.lastSNR(), DEC);
       Serial.print(" cap1= ");Serial.print(Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
       Serial.print(" cap2= ");Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
       ///////////////////////MQTT Code
       //sendMessage(String(bufChar));
 
 
-      //////////////////////////////////
-      float sensor = rxpayload.voltage;
+      //Flash LED
+      if (LevelAlert())  ledcWrite(0, 128);//LED flash (pwm channel 0)
+       else ledcWrite(0, 0);//LED off (pwm channel 0)
+
+       // Send a reply to sensor
+       //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
+       uint8_t ack[1];
+       // the acknolement consists of an ack identiferer followed by nodeID
+       ack[0]=(uint8_t)170; //ack identifier 170=10101010
+       ack[1]= (uint8_t)rxpayload.nodeID;
+       rf95.send(ack, 2);
+       //rf95.send(outgoingData, sizeof(outgoingData));
+       rf95.waitPacketSent();
+
+      //MQTT SEND/////////////////////////////////
+      _checkWifi_mqtt();
+      float sensor = temperatureDeompress(rxpayload.temperature);
       dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-      ubidotsmqttSingle("voltage", str_sensor);
+      ubidotsmqttSingle("temp", str_sensor);
+      delay(1000);
+      ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
+        "rssi", -rxpayload.rssi, "voltage", batteryVoltageDecompress(rxpayload.voltage));
 
-        ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
-        "rssi", -rxpayload.rssi, "temp", temperatureDeompress(rxpayload.temperature));
+      delay(3000);
+      ubidotsmqttJson("level", (int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte),
+         "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte), "local-SNR", rf95.lastSNR());
 
-        ubidotsmqttJson("level-1", (int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte),
-         "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte), "temp", temperatureDeompress(rxpayload.temperature));
+      delay(1000);
+      sensor = rf95.frequencyError();
+      dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+      ubidotsmqttSingle("frequency-error", str_sensor);
 
      /*client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
      client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
@@ -163,27 +204,17 @@ void loop() {
      client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
      client2.sendAll(false);*/
 
-      // Send a reply
-      //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
 
-      uint8_t ack[1];
-      // the acknolement consists of an ack identiferer followed by nodeID
-      ack[0]=(uint8_t)170; //ack identifier 170=10101010
-      ack[1]= (uint8_t)rxpayload.nodeID;
-
-
-      //uint8_t outgoingData[] = {rxpayload.nodeID};
-      rf95.send(ack, 2);
-      //rf95.send(outgoingData, sizeof(outgoingData));
-      rf95.waitPacketSent();
-      //Serial.println("Sent a reply");
-      digitalWrite(LED, LOW);
     }
     else {
       //Serial.println("Receive failed");
     }
   }
   client.loop();//Mqtt
+  /*esp_sleep_enable_timer_wakeup(10000000); //10 seconds
+  //erial.printf("start light_sleep: %d\n");
+   int ret = esp_light_sleep_start();
+   Serial.printf("light_sleep: %d\n", ret);*/
 delay(10000);
 
 }
@@ -199,7 +230,7 @@ Description : Connect to WiFi access point
 void _initWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 Serial.println("WiFi Connecting");
-for (int waiting=0; waiting <= 40; waiting++){
+for (int waiting=0; waiting <= 6; waiting++){
   if (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.println(" Waiting for WiFi...");
@@ -217,10 +248,7 @@ if (WiFi.status() == WL_CONNECTED) {
 
 void _checkWifi_mqtt() {
 if (WiFi.status() != WL_CONNECTED) {
-  //WiFi.disconnect();
-  delay(100);
-  Serial.print(" reconnecting wifi");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  _initWiFi();
   delay(1000);
   //client.connect(MQTT_CLIENT_NAME, TOKEN, "")
 }
@@ -247,7 +275,7 @@ void _initLoRa() {
   delay(10);
   digitalWrite(RFM95_RST, HIGH);
   delay(100);
-rf95.printRegisters(); //th
+
   while (!rf95.init()) {
     Serial.println("LoRa radio init failed");
     //while (1);//th
@@ -263,8 +291,10 @@ rf95.printRegisters(); //th
   delay(1000);
 
   rf95.setTxPower(17, false);
-  rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);//th
-  rf95.printRegisters(); //th
+  rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);//
+  delay(10);
+  rf95.setModemRegisters(&radiosetting);//this is where we apply our custom settings
+  rf95.printRegisters();
 
 
 
@@ -382,3 +412,14 @@ Serial.print(" topic= ");Serial.println(topic);
 Serial.println(" payload= ");Serial.println(JSONmessageBuffer);
 client.publish(topic, JSONmessageBuffer);
 }
+
+boolean LevelAlert (){
+  int level1 = Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte);
+  int level2 = Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte);
+  //level1 = 0;
+  //level2 = 0;
+
+  const int delta =-90;//
+  if (level1 <(level2+delta)) return true;
+    else return false;
+  }
