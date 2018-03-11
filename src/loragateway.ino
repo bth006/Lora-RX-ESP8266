@@ -9,6 +9,9 @@
 #include <RH_RF95.h>
 #include "RadioSettings.h"
 #include <ArduinoJson.h>
+#include <Adafruit_NeoPixel.h>
+
+
 //#include "Wire.h"//th
 //#include "UbidotsMicroESP8266.h"
 // WiFi access credentials
@@ -43,6 +46,9 @@ void reconnect();
 void _initLoRa();
 void _initWiFi();
 void _checkWifi_mqtt();
+void rainbow(uint8_t wait);
+void theaterChaseRainbow(uint8_t wait);
+//int32_t Wheel(byte WheelPos);
 
 long batteryVoltageDecompress (byte batvoltage);
 float temperatureDeompress(byte temperature);
@@ -86,6 +92,10 @@ struct payloadDataStruct{
   //byte capsensor3Highbyte
 }rxpayload;
 
+#define Neopixel_PIN 21
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, Neopixel_PIN, NEO_GRB + NEO_KHZ800);
+
+
 /*struct payloadDataStruct{
 int voltage;
 
@@ -98,6 +108,13 @@ Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
+strip.begin();
+  rainbow(2);
+  theaterChaseRainbow(50);
+strip.setPixelColor(7, strip.Color(0,0,255));
+  strip.setPixelColor(2, strip.Color(0,0,255));
+  strip.setPixelColor(0, strip.Color(255,0,255));
+  strip.show();
 //client2.setDebug(true); // Uncomment this line to set DEBUG on
 //set up 1HZ pwm on LED
 pinMode(BUILTIN_BLUE_LED, OUTPUT);
@@ -164,8 +181,17 @@ void loop() {
 
 
       //Flash LED
-      if (LevelAlert())  ledcWrite(0, 128);//LED flash (pwm channel 0)
-       else ledcWrite(0, 0);//LED off (pwm channel 0)
+      if (LevelAlert())  {
+        theaterChaseRainbow(50);
+        strip.setPixelColor(1, strip.Color(0,0,255));
+        strip.show();
+
+        ledcWrite(0, 128);}//LED flash (pwm channel 0)
+       else {
+         ledcWrite(0, 0);//LED off (pwm channel 0)
+         strip.setPixelColor(1, strip.Color(0,0,0));
+         strip.show();
+       }
 
        // Send a reply to sensor
        //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
@@ -423,3 +449,48 @@ boolean LevelAlert (){
   if (level1 <(level2+delta)) return true;
     else return false;
   }
+
+  void rainbow(uint8_t wait) {
+    uint16_t i, j;
+
+    for(j=0; j<256; j++) {
+      for(i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, Wheel((i+j) & 255));
+      }
+      strip.show();
+      delay(wait);
+    }
+  }
+
+  //Theatre-style crawling lights with rainbow effect
+  void theaterChaseRainbow(uint8_t wait) {
+    for (int j=0; j < 256; j++) {     // cycle all 256 colors in the wheel
+      for (int q=0; q < 3; q++) {
+        for (int i=0; i < strip.numPixels(); i=i+3) {
+          strip.setPixelColor(i+q, Wheel( (i+j) % 255));    //turn every third pixel on
+        }
+        strip.show();
+
+        delay(wait);
+
+        for (int i=0; i < strip.numPixels(); i=i+3) {
+          strip.setPixelColor(i+q, 0);        //turn every third pixel off
+        }
+      }
+    }
+  }
+
+  // Input a value 0 to 255 to get a color value.
+// The colours are a transition r - g - b - back to r.
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if(WheelPos < 85) {
+    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+  WheelPos -= 170;
+  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
