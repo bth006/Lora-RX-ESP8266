@@ -9,7 +9,7 @@
 #include <RH_RF95.h>
 #include "RadioSettings.h"
 #include <ArduinoJson.h>
-#include <Adafruit_NeoPixel.h>
+#include "WS2812.h" //neopixel
 
 
 //#include "Wire.h"//th
@@ -46,9 +46,8 @@ void reconnect();
 void _initLoRa();
 void _initWiFi();
 void _checkWifi_mqtt();
-void rainbow(uint8_t wait);
-void theaterChaseRainbow(uint8_t wait);
-//int32_t Wheel(byte WheelPos);
+void neopixel_clear ();
+
 
 long batteryVoltageDecompress (byte batvoltage);
 float temperatureDeompress(byte temperature);
@@ -92,29 +91,37 @@ struct payloadDataStruct{
   //byte capsensor3Highbyte
 }rxpayload;
 
-#define Neopixel_PIN 21
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, Neopixel_PIN, NEO_GRB + NEO_KHZ800);
 
+////neopixel
+const int PIXEL_PIN1 = 21;
+const uint16_t NUM_PIXELS = 8;  // How many pixels you want to drive (could be set individualy)
 
-/*struct payloadDataStruct{
-int voltage;
+WS2812 LedStrip[] = { WS2812((gpio_num_t)PIXEL_PIN1,NUM_PIXELS,0), // pin, count, port [0..7]
+                  };
 
-  byte rssi;
-  byte nodeID;
-}rxpayload;
-*/
 /*----------------------------------------------------------------------------
 Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
-strip.begin();
-  rainbow(2);
-  theaterChaseRainbow(50);
-strip.setPixelColor(7, strip.Color(0,0,255));
-  strip.setPixelColor(2, strip.Color(0,0,255));
-  strip.setPixelColor(0, strip.Color(255,0,255));
-  strip.show();
+
+
+neopixel_clear();
+
+
+
+
+
+  LedStrip[0].setPixel(7,255, 0, 0);
+  LedStrip[0].setPixel(6,255, 255, 255);
+LedStrip[0].setPixel(5,100, 100, 127);
+LedStrip[0].setPixel(4,0, 0, 127);
+  LedStrip[0].setPixel(3,0, 0, 127);
+  LedStrip[0].setPixel(1,0, 255, 0);
+  LedStrip[0].setPixel(0,255,0, 0);
+  LedStrip[0].show();
+
+
 //client2.setDebug(true); // Uncomment this line to set DEBUG on
 //set up 1HZ pwm on LED
 pinMode(BUILTIN_BLUE_LED, OUTPUT);
@@ -135,7 +142,7 @@ ledcWrite(0, 0);//led off
   client.setServer(mqttBroker, 1883);
   client.setCallback(callback);
   _checkWifi_mqtt();
-
+neopixel_clear();
 }
 
 
@@ -148,7 +155,6 @@ void loop() {
 //rf95.printRegisters(); //th
 
   if (rf95.available()) {
-    // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
     if (rf95.recv(buf, &len)) {
@@ -182,19 +188,16 @@ void loop() {
 
       //Flash LED
       if (LevelAlert())  {
-        theaterChaseRainbow(50);
-        strip.setPixelColor(1, strip.Color(0,0,255));
-        strip.show();
-
+        LedStrip[0].setPixel(1,255, 255, 0);
+        LedStrip[0].show();
         ledcWrite(0, 128);}//LED flash (pwm channel 0)
        else {
          ledcWrite(0, 0);//LED off (pwm channel 0)
-         strip.setPixelColor(1, strip.Color(0,0,0));
-         strip.show();
+         LedStrip[0].setPixel(1,0, 0, 0);
+         LedStrip[0].show();
        }
 
        // Send a reply to sensor
-       //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
        uint8_t ack[1];
        // the acknolement consists of an ack identiferer followed by nodeID
        ack[0]=(uint8_t)170; //ack identifier 170=10101010
@@ -205,31 +208,21 @@ void loop() {
 
       //MQTT SEND/////////////////////////////////
       _checkWifi_mqtt();
+      if (rxpayload.nodeID==0) {//the water tank has nodeid 0
       float sensor = temperatureDeompress(rxpayload.temperature);
       dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
       ubidotsmqttSingle("temp", str_sensor);
       delay(1000);
       ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
         "rssi", -rxpayload.rssi, "voltage", batteryVoltageDecompress(rxpayload.voltage));
-
       delay(3000);
       ubidotsmqttJson("level", (int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte),
          "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte), "local-SNR", rf95.lastSNR());
-
       delay(1000);
       sensor = rf95.frequencyError();
       dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
       ubidotsmqttSingle("frequency-error", str_sensor);
-
-     /*client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
-     client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
-     client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
-     client2.add("59d85600c03f97202c9ff2c0",temperatureDeompress(rxpayload.temperature))  ;
-     client2.sendAll(false);
-     client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
-     client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
-     client2.sendAll(false);*/
-
+      }
 
     }
     else {
@@ -237,10 +230,6 @@ void loop() {
     }
   }
   client.loop();//Mqtt
-  /*esp_sleep_enable_timer_wakeup(10000000); //10 seconds
-  //erial.printf("start light_sleep: %d\n");
-   int ret = esp_light_sleep_start();
-   Serial.printf("light_sleep: %d\n", ret);*/
 delay(10000);
 
 }
@@ -337,7 +326,7 @@ return (result2);
 
 float temperatureDeompress(byte temperature){
   //decomcompress temperature from 1 byte
-  // allowable temperature range is 0 to 51 degree C
+  //allowable temperature range is 0 to 51 degree C
 float result2;
 result2=((float)temperature)/5;
 //result2=(float)temperature;
@@ -401,7 +390,7 @@ client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsens
 
 
 void ubidotsmqttTriple(char* varable1, int value1, char* varable2, char* value2, char* varable3, char* value3){
-//format topic and payload, then publish single data point
+//format topic and payload, then MQTT publish single data point
 sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
 char str_value1[10];
 char str_value2[10];
@@ -445,52 +434,14 @@ boolean LevelAlert (){
   //level1 = 0;
   //level2 = 0;
 
-  const int delta =-90;//
+  const int delta =-100;//
   if (level1 <(level2+delta)) return true;
     else return false;
   }
 
-  void rainbow(uint8_t wait) {
-    uint16_t i, j;
-
-    for(j=0; j<256; j++) {
-      for(i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, Wheel((i+j) & 255));
-      }
-      strip.show();
-      delay(wait);
-    }
+void neopixel_clear (){
+  for (uint16_t i=0;i<NUM_PIXELS;i++) {
+        LedStrip[0].setPixel((uint16_t)i,0, 0, 0);
   }
-
-  //Theatre-style crawling lights with rainbow effect
-  void theaterChaseRainbow(uint8_t wait) {
-    for (int j=0; j < 256; j++) {     // cycle all 256 colors in the wheel
-      for (int q=0; q < 3; q++) {
-        for (int i=0; i < strip.numPixels(); i=i+3) {
-          strip.setPixelColor(i+q, Wheel( (i+j) % 255));    //turn every third pixel on
-        }
-        strip.show();
-
-        delay(wait);
-
-        for (int i=0; i < strip.numPixels(); i=i+3) {
-          strip.setPixelColor(i+q, 0);        //turn every third pixel off
-        }
-      }
-    }
-  }
-
-  // Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
-uint32_t Wheel(byte WheelPos) {
-  WheelPos = 255 - WheelPos;
-  if(WheelPos < 85) {
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-  }
-  if(WheelPos < 170) {
-    WheelPos -= 85;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-  }
-  WheelPos -= 170;
-  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+  LedStrip[0].show();
 }
