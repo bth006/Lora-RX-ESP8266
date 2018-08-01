@@ -3,59 +3,45 @@
 // March 2017
 #include <WiFi.h>
 #include <PubSubClient.h>
-//#include <ESP8266WiFiMulti.h>
-//#include <ESP8266HTTPClient.h>
-
 #include <RH_RF95.h>
 #include "RadioSettings.h"
 #include <ArduinoJson.h>
 #include "WS2812.h" //neopixel
 
-
-//#include "Wire.h"//th
-//#include "UbidotsMicroESP8266.h"
-// WiFi access credentials
-#define  WIFI_SSID         "Penryn"         // WiFi SSID
-#define  WIFI_PASSWORD     "hoooverr"         // WiFI Password
-
-
-#define TOKEN  "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171"  // Put here your Ubidots TOKEN
-#define ID_1 "59d85600c03f97202c9ff2c0" // Put your variable ID here
+// WiFi and Ubidots access credentials
+#define WIFI_SSID "Penryn"                         // WiFi SSID
+#define WIFI_PASSWORD "hoooverr"                   // WiFI Password
+#define TOKEN "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171" // Put here your Ubidots TOKEN
+#define ID_1 "59d85600c03f97202c9ff2c0"            // Put your variable ID here
 
 WiFiClient wificlient;
 
 /****************************************
  * MQTT
  ****************************************/
-void ubidotsmqttSingle(char const* varable, char const* value);
-void ubidotsmqttJson(char* varable1, int value1, char* varable2, int value2, char* varable3, int value3);
-#define VARIABLE_LABEL "MQTTsensor2" // Assing the variable label
-#define DEVICE_LABEL "esp" // Assig the device label
+void ubidotsmqttSingle(char const *varable, char const *value);
+void ubidotsmqttJson(char *varable1, int value1, char *varable2, int value2, char *varable3, int value3);
+#define VARIABLE_LABEL "MQTTsensor2"  // Assing the variable label
+#define DEVICE_LABEL "esp"            // Assig the device label
 #define MQTT_CLIENT_NAME "OLtBrXVH6i" // MQTT client Name, please enter your own 8-12 alphanumeric character ASCII string;
-char mqttBroker[]  = "things.ubidots.com";
+char mqttBroker[] = "things.ubidots.com";
 char payload[100];
 char topic[150];
 // Space to store values to send
 char str_sensor[10];
-
 PubSubClient client(wificlient);
 
-void callback(char* topic, byte* payload, unsigned int length);
+//Function Prototypes
+void callback(char *topic, byte *payload, unsigned int length);
 void reconnect();
-/*****************************************/
 void _initLoRa();
 void _initWiFi();
 void _checkWifi_mqtt();
-void neopixel_clear ();
+void neopixel_clear();
 
-
-long batteryVoltageDecompress (byte batvoltage);
+long batteryVoltageDecompress(byte batvoltage);
 float temperatureDeompress(byte temperature);
 unsigned int Combine2bytes(byte x_high, byte x_low);
-
-
-
-//Ubidots client2(TOKEN,"client2");
 
 // JSON Buffer
 DynamicJsonBuffer jsonBuffer;
@@ -74,11 +60,12 @@ DynamicJsonBuffer jsonBuffer;
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
 static const RH_RF95::ModemConfig radiosetting = {
-    BW_SETTING<<4 | CR_SETTING<<1 | ImplicitHeaderMode_SETTING,
-    SF_SETTING<<4 | CRC_SETTING<<2,
-    LowDataRateOptimize_SETTING<<3 | ACGAUTO_SETTING<<2};
+    BW_SETTING << 4 | CR_SETTING << 1 | ImplicitHeaderMode_SETTING,
+    SF_SETTING << 4 | CRC_SETTING << 2,
+    LowDataRateOptimize_SETTING << 3 | ACGAUTO_SETTING << 2};
 
-struct payloadDataStruct{
+struct payloadDataStruct
+{
   byte nodeID;
   byte rssi;
   byte voltage;
@@ -87,47 +74,34 @@ struct payloadDataStruct{
   byte capsensor1Highbyte;
   byte capsensor2Lowbyte;
   byte capsensor2Highbyte;
-  //byte capsensor3Lowbyte;
-  //byte capsensor3Highbyte
-}rxpayload;
-
+  byte capsensor3Lowbyte;
+  byte capsensor3Highbyte;
+} rxpayload;
 
 ////neopixel
 const int PIXEL_PIN1 = 21;
-const uint16_t NUM_PIXELS = 8;  // How many pixels you want to drive (could be set individualy)
-
-WS2812 LedStrip[] = { WS2812((gpio_num_t)PIXEL_PIN1,NUM_PIXELS,0), // pin, count, port [0..7]
-                  };
+const uint16_t NUM_PIXELS = 8; // How many pixels you want to drive (could be set individualy)
+WS2812 LedStrip[] = {
+    WS2812((gpio_num_t)PIXEL_PIN1, NUM_PIXELS, 0), // pin, count, port [0..7]
+};
 
 /*----------------------------------------------------------------------------
 Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
-void setup() {
+void setup()
+{
 
-
-neopixel_clear();
-
-
-
-
-
-  LedStrip[0].setPixel(7,255, 0, 0);
-  LedStrip[0].setPixel(6,255, 255, 255);
-LedStrip[0].setPixel(5,100, 100, 127);
-LedStrip[0].setPixel(4,0, 0, 127);
-  LedStrip[0].setPixel(3,0, 0, 127);
-  LedStrip[0].setPixel(1,0, 255, 0);
-  LedStrip[0].setPixel(0,255,0, 0);
+  neopixel_clear();
+  LedStrip[0].setPixel(7, 255, 0, 0);
   LedStrip[0].show();
 
-
-//client2.setDebug(true); // Uncomment this line to set DEBUG on
-//set up 1HZ pwm on LED
-pinMode(BUILTIN_BLUE_LED, OUTPUT);
-ledcSetup(0, 1, 8);//pwm channel 0. 1Hz, 8 bit resolution
-ledcAttachPin(BUILTIN_BLUE_LED, 0);//attach LED to PWN channel 0
-ledcWrite(0, 0);//led off
+  //client2.setDebug(true); // Uncomment this line to set DEBUG on
+  //set up 1HZ pwm on LED
+  pinMode(BUILTIN_BLUE_LED, OUTPUT);
+  ledcSetup(0, 1, 8);                 //pwm channel 0. 1Hz, 8 bit resolution
+  ledcAttachPin(BUILTIN_BLUE_LED, 0); //attach LED to PWN channel 0
+  ledcWrite(0, 0);                    //led off
 
   Serial.begin(57600);
   delay(1000);
@@ -136,32 +110,35 @@ ledcWrite(0, 0);//led off
   rf95.setModemRegisters(&radiosetting);
   _initWiFi();
 
-  Serial.print(" CPU");Serial.print(F_CPU/1000000,DEC);
+  Serial.print(" CPU");
+  Serial.print(F_CPU / 1000000, DEC);
   Serial.println(F(" MHz"));
 
   client.setServer(mqttBroker, 1883);
   client.setCallback(callback);
   _checkWifi_mqtt();
-neopixel_clear();
+  neopixel_clear();
 }
-
 
 /*----------------------------------------------------------------------------
 Function : loop()
 Description : Main program loop
 ------------------------------------------------------------------------------*/
-void loop() {
-//client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
-//rf95.printRegisters(); //th
+void loop()
+{
+  //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
+  //rf95.printRegisters(); //th
 
-  if (rf95.available()) {
+  if (rf95.available())
+  {
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-    if (rf95.recv(buf, &len)) {
+    if (rf95.recv(buf, &len))
+    {
       delay(10);
-
       char bufChar[len];
-      for(int i = 0; i < len; i++) {
+      for (int i = 0; i < len; i++)
+      {
         bufChar[i] = char(buf[i]);
         Serial.print(String(bufChar[i]));
       }
@@ -172,112 +149,129 @@ void loop() {
 
       memcpy(&rxpayload, buf, sizeof(rxpayload));
 
-
       //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
-      Serial.print(" nodeID = ");Serial.print(rxpayload.nodeID);
-      Serial.print(" remote voltage comp = ");Serial.print((rxpayload.voltage));
-      Serial.print(" remote voltage = ");Serial.print(batteryVoltageDecompress(rxpayload.voltage));
-      Serial.print(" remote rssi = ");Serial.print(rxpayload.rssi);
-      Serial.print(" Local RSSI: ");Serial.print(rf95.lastRssi(), DEC);
-      Serial.print(" Local SNR: ");Serial.print(rf95.lastSNR(), DEC);
-      Serial.print(" cap1= ");Serial.print(Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
-      Serial.print(" cap2= ");Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
+      Serial.print(" nodeID = ");
+      Serial.print(rxpayload.nodeID);
+      Serial.print(" remote voltage comp = ");
+      Serial.print((rxpayload.voltage));
+      Serial.print(" remote voltage = ");
+      Serial.print(batteryVoltageDecompress(rxpayload.voltage));
+      Serial.print(" remote rssi = ");
+      Serial.print(rxpayload.rssi);
+      Serial.print(" Local RSSI: ");
+      Serial.print(rf95.lastRssi(), DEC);
+      Serial.print(" Local SNR: ");
+      Serial.print(rf95.lastSNR(), DEC);
+      Serial.print(" cap1= ");
+      Serial.print(Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte));
+      Serial.print(" cap2= ");
+      Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte));
+      Serial.print(" cap3= ");
+      Serial.print(Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
       ///////////////////////MQTT Code
       //sendMessage(String(bufChar));
 
-
       //Flash LED
-      if (LevelAlert())  {
-        LedStrip[0].setPixel(1,255, 255, 0);
+      if (LevelAlert())
+      {
+        LedStrip[0].setPixel(1, 255, 255, 0);
         LedStrip[0].show();
-        ledcWrite(0, 128);}//LED flash (pwm channel 0)
-       else {
-         ledcWrite(0, 0);//LED off (pwm channel 0)
-         LedStrip[0].setPixel(1,0, 0, 0);
-         LedStrip[0].show();
-       }
+        ledcWrite(0, 128);
+      } //LED flash (pwm channel 0)
+      else
+      {
+        ledcWrite(0, 0); //LED off (pwm channel 0)
+        LedStrip[0].setPixel(1, 0, 0, 0);
+        LedStrip[0].show();
+      }
 
-       // Send a reply to sensor
-       uint8_t ack[1];
-       // the acknolement consists of an ack identiferer followed by nodeID
-       ack[0]=(uint8_t)170; //ack identifier 170=10101010
-       ack[1]= (uint8_t)rxpayload.nodeID;
-       rf95.send(ack, 2);
-       //rf95.send(outgoingData, sizeof(outgoingData));
-       rf95.waitPacketSent();
+      // Send a reply to sensor
+      uint8_t ack[1];
+      // the acknolement consists of an ack identiferer followed by nodeID
+      ack[0] = (uint8_t)170; //ack identifier 170=10101010
+      ack[1] = (uint8_t)rxpayload.nodeID;
+      rf95.send(ack, 2);
+      //rf95.send(outgoingData, sizeof(outgoingData));
+      rf95.waitPacketSent();
 
       //MQTT SEND/////////////////////////////////
       _checkWifi_mqtt();
-      if (rxpayload.nodeID==0) {//the water tank has nodeid 0
-      float sensor = temperatureDeompress(rxpayload.temperature);
-      dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-      ubidotsmqttSingle("temp", str_sensor);
-      delay(1000);
-      ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
-        "rssi", -rxpayload.rssi, "voltage", batteryVoltageDecompress(rxpayload.voltage));
-      delay(3000);
-      ubidotsmqttJson("level", (int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte),
-         "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte), "local-SNR", rf95.lastSNR());
-      delay(1000);
-      sensor = rf95.frequencyError();
-      dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-      ubidotsmqttSingle("frequency-error", str_sensor);
+      if (rxpayload.nodeID == 0)
+      { //the water tank has nodeid 0
+        float sensor = temperatureDeompress(rxpayload.temperature);
+        dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+        ubidotsmqttSingle("temp", str_sensor);
+        delay(1000);
+        ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
+                        "rssi", -rxpayload.rssi, "voltage", batteryVoltageDecompress(rxpayload.voltage));
+        delay(3000);
+        ubidotsmqttJson("level", (int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte),
+                        "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), "local-SNR", rf95.lastSNR());
+        delay(1000);
+        sensor = rf95.frequencyError();
+        dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+        ubidotsmqttSingle("frequency-error", str_sensor);
       }
-
     }
-    else {
+    else
+    {
       //Serial.println("Receive failed");
     }
   }
-  client.loop();//Mqtt
-delay(10000);
-
+  client.loop(); //Mqtt
+  delay(10000);
 }
 
-
-void donothing() {
+void donothing()
+{
 }
 
 /*----------------------------------------------------------------------------
 Function : _initWiFi()
 Description : Connect to WiFi access point
 ------------------------------------------------------------------------------*/
-void _initWiFi() {
+void _initWiFi()
+{
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-Serial.println("WiFi Connecting");
-for (int waiting=0; waiting <= 6; waiting++){
-  if (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.println(" Waiting for WiFi...");
-    Serial.println(waiting);
-  }
-
-  delay(1000);
-}
-
-if (WiFi.status() == WL_CONNECTED) {
-  Serial.println("WiFi Connected!");
-}
-}
-
-
-void _checkWifi_mqtt() {
-if (WiFi.status() != WL_CONNECTED) {
-  _initWiFi();
-  delay(1000);
-  //client.connect(MQTT_CLIENT_NAME, TOKEN, "")
-}
-if (!client.connected()) {
-    Serial.println("reconecting/connecting mqtt");
-    reconnect();
+  Serial.println("WiFi Connecting");
+  for (int waiting = 0; waiting <= 6; waiting++)
+  {
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      delay(500);
+      Serial.println(" Waiting for WiFi...");
+      Serial.println(waiting);
     }
 
+    delay(1000);
+  }
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("WiFi Connected!");
+  }
+}
+
+void _checkWifi_mqtt()
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    _initWiFi();
+    delay(1000);
+    //client.connect(MQTT_CLIENT_NAME, TOKEN, "")
+  }
+  if (!client.connected())
+  {
+    Serial.println("reconecting/connecting mqtt");
+    reconnect();
+  }
 }
 /*----------------------------------------------------------------------------
 Function : _initLoRa()
 Description : Connect to WiFi access point
 ------------------------------------------------------------------------------*/
-void _initLoRa() {
+void _initLoRa()
+{
   attachInterrupt(digitalPinToInterrupt(RFM95_INT), donothing, CHANGE);
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
@@ -291,59 +285,63 @@ void _initLoRa() {
   digitalWrite(RFM95_RST, HIGH);
   delay(100);
 
-  while (!rf95.init()) {
+  while (!rf95.init())
+  {
     Serial.println("LoRa radio init failed");
     //while (1);//th
   }
   Serial.println("LoRa radio init OK!");
   delay(1000);
 
-  if (!rf95.setFrequency(RF95_FREQ)) {
+  if (!rf95.setFrequency(RF95_FREQ))
+  {
     Serial.println("setFrequency failed");
-    while (1);
+    while (1)
+      ;
   }
   Serial.println("Freq set");
   delay(1000);
 
   rf95.setTxPower(17, false);
-  rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);//
+  rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096); //
   delay(10);
-  rf95.setModemRegisters(&radiosetting);//this is where we apply our custom settings
+  rf95.setModemRegisters(&radiosetting); //this is where we apply our custom settings
   rf95.printRegisters();
-
-
 
   Serial.println("LoRa Listening...");
   delay(1000);
 }
 
-long batteryVoltageDecompress (byte batvoltage) {
-//decompress voltage from 1 byte
-long result2;
-result2 =  (batvoltage*8)+1300;
-return (result2);
+long batteryVoltageDecompress(byte batvoltage)
+{
+  //decompress voltage from 1 byte
+  long result2;
+  result2 = (batvoltage * 8) + 1300;
+  return (result2);
 }
 
-float temperatureDeompress(byte temperature){
+float temperatureDeompress(byte temperature)
+{
   //decomcompress temperature from 1 byte
   //allowable temperature range is 0 to 51 degree C
-float result2;
-result2=((float)temperature)/5;
-//result2=(float)temperature;
-return result2;
+  float result2;
+  result2 = ((float)temperature) / 5;
+  //result2=(float)temperature;
+  return result2;
 }
 
 unsigned int Combine2bytes(byte x_high, byte x_low)
 //convert high and low bytes to unsigned int (0-65,535 (2^16) - 1)
 {
-unsigned int combined;
-  if ((x_high >=256) & (x_low>=256)) combined =0; ///out of range
+  unsigned int combined;
+  if ((x_high >= 256) & (x_low >= 256))
+    combined = 0; ///out of range
   combined = x_low | x_high << 8;
   return combined;
 }
 
-
-void callback(char* topic, byte* payload, unsigned int length) {
+void callback(char *topic, byte *payload, unsigned int length)
+{
   char p[length + 1];
   memcpy(p, payload, length);
   p[length] = NULL;
@@ -352,18 +350,24 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(topic);
 }
 
-void reconnect() {
+void reconnect()
+{
   // Loop a few times until we're reconnected
-  int attempts=10;
-  while (!client.connected()) {
-    if (attempts<=0) break;
-    attempts = attempts-1;
+  int attempts = 10;
+  while (!client.connected())
+  {
+    if (attempts <= 0)
+      break;
+    attempts = attempts - 1;
     Serial.println("Attempting MQTT connection...");
 
     // Attemp to connect MQTT
-    if (client.connect(MQTT_CLIENT_NAME, TOKEN, "")) {
+    if (client.connect(MQTT_CLIENT_NAME, TOKEN, ""))
+    {
       Serial.println("Connected");
-    } else {
+    }
+    else
+    {
       Serial.print("Failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 2 seconds");
@@ -373,75 +377,85 @@ void reconnect() {
   }
 }
 
-void ubidotsmqttSingle(char const* varable, char const* value){
-//format topic and payload, then publish single data point
-sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
+void ubidotsmqttSingle(char const *varable, char const *value)
+{
+  //format topic and payload, then publish single data point
+  sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
 
-sprintf(payload, "%s", ""); // Cleans the payload
-sprintf(payload, "%s {\"%s\": %s}", payload, varable, value);// Adds the value
-Serial.print("Publishing data to Ubidots Cloud");
-Serial.print(" topic= ");Serial.println(topic);
-Serial.println(" payload= ");Serial.println(payload);
-client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
+  sprintf(payload, "%s", "");                                   // Cleans the payload
+  sprintf(payload, "%s {\"%s\": %s}", payload, varable, value); // Adds the value
+  Serial.print("Publishing data to Ubidots Cloud");
+  Serial.print(" topic= ");
+  Serial.println(topic);
+  Serial.println(" payload= ");
+  Serial.println(payload);
+  client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
 
-//example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
-
+  //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
 }
 
+void ubidotsmqttTriple(char *varable1, int value1, char *varable2, char *value2, char *varable3, char *value3)
+{
+  //format topic and payload, then MQTT publish single data point
+  sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
+  char str_value1[10];
+  char str_value2[10];
+  char str_value3[10];
+  dtostrf(value1, 4, 2, str_value1);
 
-void ubidotsmqttTriple(char* varable1, int value1, char* varable2, char* value2, char* varable3, char* value3){
-//format topic and payload, then MQTT publish single data point
-sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
-char str_value1[10];
-char str_value2[10];
-char str_value3[10];
-dtostrf(value1, 4, 2, str_value1);
+  sprintf(payload, "%s", ""); // Cleans the payload
+  //sprintf(payload, "%s {\"%s\": %s}", payload, varable, value);// Adds the value
+  sprintf(payload, "%s {\"%s\": %s\", \"%s\": %s, \"%s\": %s}", payload, varable1, value1, varable2, value2, varable3, value3); // Adds the value
+  Serial.print("Publishing data to Ubidots Cloud");
+  Serial.print(" topic= ");
+  Serial.println(topic);
+  Serial.println(" payload= ");
+  Serial.println(payload);
+  client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
 
-sprintf(payload, "%s", ""); // Cleans the payload
-//sprintf(payload, "%s {\"%s\": %s}", payload, varable, value);// Adds the value
-sprintf(payload, "%s {\"%s\": %s\", \"%s\": %s, \"%s\": %s}", payload, varable1, value1, varable2, value2, varable3, value3);// Adds the value
-Serial.print("Publishing data to Ubidots Cloud");
-Serial.print(" topic= ");Serial.println(topic);
-Serial.println(" payload= ");Serial.println(payload);
-client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
-
-//example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
-
+  //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
 }
 
-void ubidotsmqttJson(char* varable1, int value1, char* varable2, int value2, char* varable3, int value3){
+void ubidotsmqttJson(char *varable1, int value1, char *varable2, int value2, char *varable3, int value3)
+{
 
   StaticJsonBuffer<100> jsonBuffer;
   char JSONmessageBuffer[100];
-  JsonObject& root = jsonBuffer.createObject();
-
+  JsonObject &root = jsonBuffer.createObject();
   root[varable1] = value1;
   root[varable2] = value2;
   root[varable3] = value3;
 
-root.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
-Serial.println(JSONmessageBuffer);
-sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
-Serial.print("Publishing data to Ubidots Cloud");
-Serial.print(" topic= ");Serial.println(topic);
-Serial.println(" payload= ");Serial.println(JSONmessageBuffer);
-client.publish(topic, JSONmessageBuffer);
+  root.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+  Serial.println(JSONmessageBuffer);
+  sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
+  Serial.print("Publishing data to Ubidots Cloud");
+  Serial.print(" topic= ");
+  Serial.println(topic);
+  Serial.println(" payload= ");
+  Serial.println(JSONmessageBuffer);
+  client.publish(topic, JSONmessageBuffer);
 }
 
-boolean LevelAlert (){
-  int level1 = Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte);
-  int level2 = Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte);
+boolean LevelAlert()
+{
+  int level1 = Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte);
+  int level2 = Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte);
   //level1 = 0;
   //level2 = 0;
 
-  const int delta =-100;//
-  if (level1 <(level2+delta)) return true;
-    else return false;
-  }
+  const int delta = -100; //
+  if (level1 < (level2 + delta))
+    return true;
+  else
+    return false;
+}
 
-void neopixel_clear (){
-  for (uint16_t i=0;i<NUM_PIXELS;i++) {
-        LedStrip[0].setPixel((uint16_t)i,0, 0, 0);
+void neopixel_clear()
+{
+  for (uint16_t i = 0; i < NUM_PIXELS; i++)
+  {
+    LedStrip[0].setPixel((uint16_t)i, 0, 0, 0);
   }
   LedStrip[0].show();
 }
