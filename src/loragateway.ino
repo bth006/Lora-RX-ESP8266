@@ -308,34 +308,23 @@ void loop()
       //MQTT SEND/////////////////////////////////
       _checkWifi_mqtt();
       Ubidotsclient.loop(); //Mqtt
-      
-  delay(1000);
-
-  Adafruitioclient.loop(); //Mqtt
-  delay(1000);
+      delay(1000);
+      Adafruitioclient.loop(); //Mqtt
+      delay(1000);
 
       AdafruitSendAll ();
       //wificlientAdafruitIO.stop();
       delay(2000);
+      _checkWifi_mqtt();
       UbidotsSendAll();
 
-      //AdafruitSendAll ();
-
-      /*client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
-     client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
-     client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
-     client2.add("59d85600c03f97202c9ff2c0",temperatureDecompress(rxpayload.temperature))  ;
-     client2.sendAll(false);
-     client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
-     client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
-     client2.sendAll(false);*/
     }
     else
     {
       //Serial.println("Receive failed");
     }
   }
-  //needed if start receiving mqtt
+  //needed if you want to receive mqtt:
   //Ubidotsclient.loop(); //Mqtt
   //Adafruitioclient.loop(); //Mqtt
   
