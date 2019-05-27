@@ -139,7 +139,7 @@ unsigned long IFTTinterval = 60*30 ;// interval in seconds between IFTTT posts
 //watcdog timer
 hw_timer_t *watchdogTimer = NULL;
 hw_timer_t *timerread = NULL;
-int watchInt = 60000000; //set time in uS must be fed within this time or reboot
+int watchInt = 480000000; //set time in uS must be fed within this time or reboot
 
 
 /*----------------------------------------------------------------------------
@@ -307,16 +307,19 @@ void loop()
 
       //MQTT SEND/////////////////////////////////
       _checkWifi_mqtt();
-      Ubidotsclient.loop(); //Mqtt
-      delay(1000);
-      Adafruitioclient.loop(); //Mqtt
-      delay(1000);
-
+      
       AdafruitSendAll ();
       //wificlientAdafruitIO.stop();
       delay(2000);
       _checkWifi_mqtt();
       UbidotsSendAll();
+      
+      Ubidotsclient.loop(); //Mqtt
+      delay(1000);
+      Adafruitioclient.loop(); //Mqtt
+      delay(1000);
+
+
 
     }
     else
@@ -484,7 +487,7 @@ void callback(char *topic, byte *payload, unsigned int length)
 void reconnect()
 {
   // Loop a few times until we're reconnected
-  int attempts = 10;
+  int attempts = 2;
   char text1[30];
   char text2[30];
 
@@ -515,7 +518,7 @@ while (!Adafruitioclient.connected())
     }
 
 
-  attempts = 10;
+  attempts = 2;
 
   while (!Ubidotsclient.connected())
   {
