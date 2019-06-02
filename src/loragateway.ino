@@ -8,6 +8,7 @@
 //1+2+3 tank full->off, tank full->80% yellow ,tank 50% full->orange, tank 40% full->red
 //6 blue is no recieving lora messages
 //7 white if wifi/mqtt loss of connection
+//7 pink if adafruit wifi/mqtt loss of connection
 /////////
 
 #include <WiFi.h>
@@ -30,7 +31,8 @@
 #define WIFI_PASSWORD "hoooverr"                   // WiFI Password
 
 
-WiFiClient wificlient;
+//WiFiClient wificlient; // general use client
+WiFiClient wificlientUbidots;
 WiFiClient wificlientAdafruitIO;
 
 /****************************************
@@ -54,9 +56,11 @@ char payload[100];
 char topic[150];
 char str_sensor[10];
 
-PubSubClient Ubidotsclient(wificlient);
+PubSubClient Ubidotsclient(wificlientUbidots);
 PubSubClient Adafruitioclient(wificlientAdafruitIO);
 
+/**********************************************/
+//FUNCTION DECLARATIONS
 void callback(char *topic, byte *payload, unsigned int length);
 void reconnect();
 void _initLoRa();
@@ -67,7 +71,8 @@ void UbidotsSendAll();
 void AdafruitiomqttSingle(char const *varable, char const *value);
 void neopixel_clear();
 void rainbow(uint8_t wait);
-void theaterChaseRainbow(uint8_t wait);
+void theaterChase(uint32_t color, int wait);
+void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth);
 void interruptReboot();// reboot if watchdog times out
 void makeIFTTTRequest();
 RgbColor Wheel();
@@ -125,6 +130,7 @@ RgbColor green(0, colorSaturation, 0);
 RgbColor greenlow(0, colorSaturation/4, 0);
 RgbColor blue(0, 0, colorSaturation);
 RgbColor white(colorSaturation/2);
+RgbColor pink(colorSaturation,colorSaturation/2,colorSaturation/2);
 RgbColor black(0);
 RgbColor orange(colorSaturation * 0.8, colorSaturation * 0.35, 0);
 RgbColor yellow(colorSaturation * 0.75, colorSaturation * 0.75, 0);
@@ -150,7 +156,7 @@ void setup()
 {
   strip.Begin();
   rainbow(2);
-  theaterChaseRainbow(5);
+  theaterChase(10000, 200);
   neopixel_clear();
   strip.SetPixelColor(0, orange); //power indicator
   strip.Show();
@@ -260,7 +266,8 @@ void loop()
       //set LEDs based on tank level
       if (tank_level <= 1)
       {
-        theaterChaseRainbow(30);
+        theaterChaseRainbow(30, 6);
+        strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, redfull);
         strip.SetPixelColor(2, redfull);
         strip.SetPixelColor(3, redfull);
@@ -270,8 +277,9 @@ void loop()
       } //builtin LED flash (pwm channel 0)
       else if (tank_level <= 50)
       {
-        theaterChaseRainbow(10);
+        theaterChaseRainbow(10,6);
         ledcWrite(0, 128); //LED flash (pwm channel 0)
+        strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, orange);
         strip.SetPixelColor(2, orange);
         strip.SetPixelColor(3, orange);
@@ -279,8 +287,9 @@ void loop()
       }
       else if (tank_level <= 80)
       {
-        theaterChaseRainbow(2);
+        theaterChaseRainbow(2,6);
         ledcWrite(0, 128); //LED off (pwm channel 0)
+        strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, yellow);
         strip.SetPixelColor(2, yellow);
         strip.SetPixelColor(3, yellow);
@@ -289,6 +298,7 @@ void loop()
       else
       {
         ledcWrite(0, 0); //LED off (pwm channel 0)
+        strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, black);
         strip.SetPixelColor(2, black);
         strip.SetPixelColor(3, black);
@@ -385,13 +395,13 @@ void _checkWifi_mqtt()
       strip.Show();
     }
   }
-  else if (!Ubidotsclient.connected())
+  else if (!Adafruitioclient.connected())
   {
     Serial.println("reconecting/connecting Adafruit mqtt");
     reconnect();
     if (!Adafruitioclient.connected())
     {
-      strip.SetPixelColor(7, white); //turn error LED on
+      strip.SetPixelColor(7, pink); //turn error LED on
       strip.Show();
     }
   }
@@ -401,6 +411,74 @@ void _checkWifi_mqtt()
     strip.Show();
   }
 }
+
+void reconnect()
+{
+  // Loop a few times until we're reconnected
+  int attempts =1;
+  int MaxAttempts = 2;
+  char text1[30];
+  char text2[30];
+
+while (!Adafruitioclient.connected())
+    {
+    if (attempts > MaxAttempts)
+      break;
+    attempts = attempts + 1;
+    Serial.println("Attempting Ada MQTT connection...");
+
+    // Attemp to connect MQTT
+    if    (Adafruitioclient.connect(clientId.c_str(), ADAFRUIT_MQTT_CLIENT_NAME, ADAFRUITIOTOKEN))
+    {
+      Serial.println("Ada Connected");
+      AdafruitiomqttSingle("messages", "Ada MQTT Connected");
+      //AdafruitiomqttSingle("messages", attempts);
+      sprintf(text2, "Ada Mqtt conn attempts %d", attempts -1);
+      
+    }
+    else
+    {
+      Serial.print("Failed, rc=");
+      Serial.print(Adafruitioclient.state());
+      Serial.println(" Ada Mqtt try again in 2 seconds");
+      // Wait 2 seconds before retrying
+      delay(2000);
+    }
+    }
+
+
+  attempts = 1;
+
+  while (!Ubidotsclient.connected())
+  {
+    if (attempts > MaxAttempts)
+      break;
+    attempts = attempts + 1;
+    Serial.println("Attempting Ubidots MQTT connection...");
+
+    // Attemp to connect MQTT
+    if (Ubidotsclient.connect(MQTT_CLIENT_NAME, UBIDOTSTOKEN, ""))
+    {
+      Serial.println("Ubidots Connected");
+      AdafruitiomqttSingle("messages", "Ubidots MQTT Connected");
+      sprintf(text1, "Ubi Mqtt connect attempts %d", attempts - 1);
+        }
+    else
+    {
+      Serial.print("Failed, rc=");
+      Serial.print(Ubidotsclient.state());
+      Serial.println(" Ubidots try again in 2 seconds");
+      // Wait 2 seconds before retrying
+      delay(2000);
+    }
+  }
+      
+  AdafruitiomqttSingle("messages", text1);
+  AdafruitiomqttSingle("messages", text2);
+
+}
+
+
 /*----------------------------------------------------------------------------
 Function : _initLoRa()
 Description : Connect to WiFi access point
@@ -484,71 +562,6 @@ void callback(char *topic, byte *payload, unsigned int length)
   Serial.println(topic);
 }
 
-void reconnect()
-{
-  // Loop a few times until we're reconnected
-  int attempts = 2;
-  char text1[30];
-  char text2[30];
-
-while (!Adafruitioclient.connected())
-    {
-    if (attempts <= 0)
-      break;
-    attempts = attempts - 1;
-    Serial.println("Attempting Ada MQTT connection...");
-
-    // Attemp to connect MQTT
-    if    (Adafruitioclient.connect(clientId.c_str(), ADAFRUIT_MQTT_CLIENT_NAME, ADAFRUITIOTOKEN))
-    {
-      Serial.println("Ada Connected");
-      AdafruitiomqttSingle("messages", "Ada MQTT Connected");
-      //AdafruitiomqttSingle("messages", attempts);
-      sprintf(text2, "Ada Mqtt conn attempts %d", 10 - attempts);
-      
-    }
-    else
-    {
-      Serial.print("Failed, rc=");
-      Serial.print(Adafruitioclient.state());
-      Serial.println(" Ada Mqtt try again in 2 seconds");
-      // Wait 2 seconds before retrying
-      delay(2000);
-    }
-    }
-
-
-  attempts = 2;
-
-  while (!Ubidotsclient.connected())
-  {
-    if (attempts <= 0)
-      break;
-    attempts = attempts - 1;
-    Serial.println("Attempting Ubidots MQTT connection...");
-
-    // Attemp to connect MQTT
-    if (Ubidotsclient.connect(MQTT_CLIENT_NAME, UBIDOTSTOKEN, ""))
-    {
-      Serial.println("Ubidots Connected");
-      AdafruitiomqttSingle("messages", "Ubidots MQTT Connected");
-      sprintf(text1, "Ubi Mqtt connect attempts %d", 10 - attempts);
-        }
-    else
-    {
-      Serial.print("Failed, rc=");
-      Serial.print(Ubidotsclient.state());
-      Serial.println(" Ubidots try again in 2 seconds");
-      // Wait 2 seconds before retrying
-      delay(2000);
-    }
-  }
-    
-  
-  AdafruitiomqttSingle("messages", text1);
-  AdafruitiomqttSingle("messages", text2);
-
-}
 
 void ubidotsmqttSingle(char const *varable, char const *value)
 {
@@ -620,7 +633,7 @@ void AdafruitiomqttSingle(char const *varable, char const *value)
   Serial.println(" payload= ");
   Serial.println(value);
   Adafruitioclient.publish(topic, value); 
-  delay(2000);
+  //delay(2000);
 }
 
 
@@ -694,14 +707,30 @@ void rainbow(uint8_t wait)
   }
 }
 
+
+void theaterChase(uint32_t color, int wait) {
+  for(int a=0; a<10; a++) {  // Repeat 10 times...
+    for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
+      neopixel_clear();         //   Set all pixels in RAM to 0 (off)
+      // 'c' counts up from 'b' to end of strip in steps of 3...
+      for(int c=b; c< NUM_PIXELS; c += 3) {
+        strip.SetPixelColor(c, color); // Set pixel 'c' to value 'color'
+      }
+      strip.Show(); // Update strip with new contents
+      delay(wait);  // Pause for a moment
+    }
+  }
+}
+
+
 //Theatre-style crawling lights with rainbow effect
-void theaterChaseRainbow(uint8_t wait)
+void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth)
 {
   for (int j = 0; j < 256; j++)
   { // cycle all 256 colors in the wheel
     for (int q = 0; q < 3; q++)
     {
-      for (int i = 0; i < NUM_PIXELS; i = i + 3)
+      for (int i = 0; i < pixLenth; i = i + 3)
       {
         strip.SetPixelColor(i + q, Wheel((i + j) % 255)); //turn every third pixel on
       }
@@ -709,7 +738,7 @@ void theaterChaseRainbow(uint8_t wait)
 
       delay(wait);
 
-      for (int i = 0; i < NUM_PIXELS; i = i + 3)
+      for (int i = 0; i < pixLenth; i = i + 3)
       {
         strip.SetPixelColor(i + q, 0); //turn every third pixel off
       }
@@ -803,7 +832,7 @@ void makeIFTTTRequest() {
   
   
   String jsonObject = String("{\"value1\":\"") + valonepoint1 + ", " + valonepoint2 + ", " + valonepoint3 +  "\",\"value2\":\"" + ESP.getFreeHeap()+ ", " + millis()/1000
-                      + "\",\"value3\":\"" + batteryVoltageDecompress(rxpayload.voltage) + "\"}";
+                      + "\",\"value3\":\"" + batteryVoltageDecompress(rxpayload.voltage) + ", " + temperatureDecompress(rxpayload.temperature) + "\"}";
   Serial.println(jsonObject);
                       
   // Comment the previous line and uncomment the next line to publish temperature readings in Fahrenheit                    
@@ -832,5 +861,6 @@ void makeIFTTTRequest() {
   Serial.println("\nclosing connection");
   client.stop(); 
 }
+
 
 
