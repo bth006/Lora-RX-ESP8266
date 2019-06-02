@@ -130,7 +130,7 @@ RgbColor green(0, colorSaturation, 0);
 RgbColor greenlow(0, colorSaturation/4, 0);
 RgbColor blue(0, 0, colorSaturation);
 RgbColor white(colorSaturation/2);
-RgbColor pink(colorSaturation,colorSaturation/2,colorSaturation/2);
+RgbColor pink(colorSaturation,colorSaturation/3,colorSaturation/3);
 RgbColor black(0);
 RgbColor orange(colorSaturation * 0.8, colorSaturation * 0.35, 0);
 RgbColor yellow(colorSaturation * 0.75, colorSaturation * 0.75, 0);
@@ -395,7 +395,8 @@ void _checkWifi_mqtt()
       strip.Show();
     }
   }
-  else if (!Adafruitioclient.connected())
+  
+  if (!Adafruitioclient.connected())
   {
     Serial.println("reconecting/connecting Adafruit mqtt");
     reconnect();
@@ -405,7 +406,8 @@ void _checkWifi_mqtt()
       strip.Show();
     }
   }
-  else
+  
+  if(Adafruitioclient.connected()&Ubidotsclient.connected())
   {
     strip.SetPixelColor(7, black);
     strip.Show();
@@ -419,6 +421,7 @@ void reconnect()
   int MaxAttempts = 2;
   char text1[30];
   char text2[30];
+  char text3[30];
 
 while (!Adafruitioclient.connected())
     {
@@ -433,7 +436,7 @@ while (!Adafruitioclient.connected())
       Serial.println("Ada Connected");
       AdafruitiomqttSingle("messages", "Ada MQTT Connected");
       //AdafruitiomqttSingle("messages", attempts);
-      sprintf(text2, "Ada Mqtt conn attempts %d", attempts -1);
+      sprintf(text1, "Ada Mqtt conn attempts %d", attempts -1);
       
     }
     else
@@ -461,12 +464,13 @@ while (!Adafruitioclient.connected())
     {
       Serial.println("Ubidots Connected");
       AdafruitiomqttSingle("messages", "Ubidots MQTT Connected");
-      sprintf(text1, "Ubi Mqtt connect attempts %d", attempts - 1);
+      sprintf(text2, "Ubi Mqtt connect attempts %d", attempts - 1);
         }
     else
     {
       Serial.print("Failed, rc=");
       Serial.print(Ubidotsclient.state());
+
       Serial.println(" Ubidots try again in 2 seconds");
       // Wait 2 seconds before retrying
       delay(2000);
@@ -475,6 +479,8 @@ while (!Adafruitioclient.connected())
       
   AdafruitiomqttSingle("messages", text1);
   AdafruitiomqttSingle("messages", text2);
+  sprintf(text3, "Ubi Mqtt state %d", Ubidotsclient.state() );
+  AdafruitiomqttSingle("messages", text3);
 
 }
 
@@ -687,6 +693,7 @@ AdafruitiomqttSingle("rx-RSSI", str_sensor);
 
 dtostrf(timeSinceLastLoraMessage/1000, 4, 3, str_sensor);
 AdafruitiomqttSingle("messages", str_sensor);
+delay(100);
 Adafruitioclient.disconnect();
 
 
