@@ -1,6 +1,6 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
-// 30 Oct 2017
+// 1 feb 2020
 //works
 
 /////LEDs
@@ -10,6 +10,10 @@
 //7 white if wifi/mqtt loss of connection
 //7 pink if adafruit wifi/mqtt loss of connection
 /////////
+
+//ENABLE FEATURES
+//#define EnableUbidots // whether to use ubidots
+
 
 #include <WiFi.h>
 #include <PubSubClient.h>
@@ -32,7 +36,9 @@
 
 
 //WiFiClient wificlient; // general use client
+#if defined (EnableUbidots)
 WiFiClient wificlientUbidots;
+#endif
 WiFiClient wificlientAdafruitIO;
 
 /****************************************
@@ -56,7 +62,9 @@ char payload[100];
 char topic[150];
 char str_sensor[10];
 
+#if defined (EnableUbidots)
 PubSubClient Ubidotsclient(wificlientUbidots);
+#endif
 PubSubClient Adafruitioclient(wificlientAdafruitIO);
 
 /**********************************************/
@@ -184,12 +192,14 @@ void setup()
   Serial.print(" CPU");
   Serial.print(F_CPU / 1000000, DEC);
   Serial.println(F(" MHz"));
-
+#if defined (EnableUbidots)
   Ubidotsclient.setServer(UbidotsmqttBroker, 1883);
+    Ubidotsclient.setCallback(callback);
+ #endif   
   Adafruitioclient.setServer(AdafruitiomqttBroker, 1883);
-  Ubidotsclient.setCallback(callback);
   _checkWifi_mqtt();
   LoraMessageTimer = millis(); //initialise timer (to calculate time since last lora message was received)
+  delay(2000);
   AdafruitiomqttSingle("messages", "booting");
 }
 
@@ -322,9 +332,10 @@ void loop()
       //wificlientAdafruitIO.stop();
       delay(2000);
       _checkWifi_mqtt();
-      UbidotsSendAll();
-      
+      #if defined (EnableUbidots)
+      UbidotsSendAll();      
       Ubidotsclient.loop(); //Mqtt
+      #endif
       delay(1000);
       Adafruitioclient.loop(); //Mqtt
       delay(1000);
@@ -345,6 +356,12 @@ void loop()
      startMillis=millis();
      makeIFTTTRequest();}
   delay(8000);
+
+
+ if (millis() - startMillis >= 7200000) {//send voltage every 2 hours
+dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 3, str_sensor);
+AdafruitiomqttSingle("voltage", str_sensor);}
+
 }
 
 void donothing()
@@ -384,7 +401,9 @@ void _checkWifi_mqtt()
     _initWiFi();
     delay(1000);
   }
-
+  strip.SetPixelColor(7, black);
+  strip.Show();
+#if defined (EnableUbidots)
   if (!Ubidotsclient.connected())
   {
     Serial.println("reconecting/connecting Ubidots mqtt");
@@ -395,7 +414,7 @@ void _checkWifi_mqtt()
       strip.Show();
     }
   }
-  
+#endif
   if (!Adafruitioclient.connected())
   {
     Serial.println("reconecting/connecting Adafruit mqtt");
@@ -407,18 +426,13 @@ void _checkWifi_mqtt()
     }
   }
   
-  if(Adafruitioclient.connected()&Ubidotsclient.connected())
-  {
-    strip.SetPixelColor(7, black);
-    strip.Show();
-  }
 }
 
 void reconnect()
 {
   // Loop a few times until we're reconnected
-  int attempts =1;
-  int MaxAttempts = 2;
+  int attempts =0;
+  int MaxAttempts = 4;
   char text1[30];
   char text2[30];
   char text3[30];
@@ -432,24 +446,25 @@ while (!Adafruitioclient.connected())
 
     // Attemp to connect MQTT
     if    (Adafruitioclient.connect(clientId.c_str(), ADAFRUIT_MQTT_CLIENT_NAME, ADAFRUITIOTOKEN))
-    {
-      Serial.println("Ada Connected");
-      AdafruitiomqttSingle("messages", "Ada MQTT Connected");
+     {
+      Serial.print("Ada Connected attempt:");Serial.println(attempts -1);
+      //AdafruitiomqttSingle("messages", "Ada MQTT Connected");
       //AdafruitiomqttSingle("messages", attempts);
-      sprintf(text1, "Ada Mqtt conn attempts %d", attempts -1);
-      
-    }
+      //sprintf(text1, "Ada Mqtt conn attempts %d", attempts -1);
+      //AdafruitiomqttSingle("messages", text1);
+     }
     else
-    {
+     {
       Serial.print("Failed, rc=");
       Serial.print(Adafruitioclient.state());
       Serial.println(" Ada Mqtt try again in 2 seconds");
-      // Wait 2 seconds before retrying
-      delay(2000);
+      // Wait  before retrying
+      delay(2000*attempts);
+     }
     }
-    }
-
-
+  
+  
+#if defined (EnableUbidots)
   attempts = 1;
 
   while (!Ubidotsclient.connected())
@@ -476,11 +491,9 @@ while (!Adafruitioclient.connected())
       delay(2000);
     }
   }
-      
-  AdafruitiomqttSingle("messages", text1);
-  AdafruitiomqttSingle("messages", text2);
   sprintf(text3, "Ubi Mqtt state %d", Ubidotsclient.state() );
   AdafruitiomqttSingle("messages", text3);
+#endif
 
 }
 
@@ -581,8 +594,9 @@ void ubidotsmqttSingle(char const *varable, char const *value)
   Serial.println(topic);
   Serial.println(" payload= ");
   Serial.println(payload);
+#if defined (EnableUbidots)
   Ubidotsclient.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
-
+#endif
   //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
 }
 
@@ -603,8 +617,9 @@ void ubidotsmqttTriple(char *varable1, int value1, char *varable2, char *value2,
   Serial.println(topic);
   Serial.println(" payload= ");
   Serial.println(payload);
+  #if defined (EnableUbidots)
   Ubidotsclient.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
-
+  #endif
   //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
 }
 
@@ -627,7 +642,9 @@ void ubidotsmqttJson(char *varable1, int value1, char *varable2, int value2, cha
   Serial.println(topic);
   Serial.println(" payload= ");
   Serial.println(JSONmessageBuffer);
+  #if defined (EnableUbidots)
   Ubidotsclient.publish(topic, JSONmessageBuffer);
+  #endif
 }
 void AdafruitiomqttSingle(char const *varable, char const *value)
 {
@@ -639,7 +656,7 @@ void AdafruitiomqttSingle(char const *varable, char const *value)
   Serial.println(" payload= ");
   Serial.println(value);
   Adafruitioclient.publish(topic, value); 
-  //delay(2000);
+  delay(2500);
 }
 
 
@@ -664,35 +681,38 @@ void UbidotsSendAll(){
 
       dtostrf(tank_level, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
       ubidotsmqttSingle("CalcLevel", str_sensor);
+      #if defined (EnableUbidots)
       Ubidotsclient.disconnect();
+      #endif
       
 }
 
 void AdafruitSendAll ()
 {
-dtostrf((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-AdafruitiomqttSingle("level-1", str_sensor);
+dtostrf((int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+AdafruitiomqttSingle("level-3", str_sensor);
 
 dtostrf((int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
 AdafruitiomqttSingle("level-2", str_sensor);
 
-dtostrf((int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+dtostrf((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+AdafruitiomqttSingle("level-1", str_sensor);
 
-AdafruitiomqttSingle("level-3", str_sensor);
+
+
 
 float sensor2 = temperatureDecompress(rxpayload.temperature);
 dtostrf(sensor2, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-
 AdafruitiomqttSingle("temperature", str_sensor);
 
-dtostrf(tank_level, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-AdafruitiomqttSingle("tank_level", str_sensor);
+//dtostrf(tank_level, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+//AdafruitiomqttSingle("tank_level", str_sensor);
 
-dtostrf(-rxpayload.rssi, 4, 3, str_sensor);
+dtostrf((int)rf95.lastRssi(), 4, 3, str_sensor);
 AdafruitiomqttSingle("rx-RSSI", str_sensor);
 
-dtostrf(timeSinceLastLoraMessage/1000, 4, 3, str_sensor);
-AdafruitiomqttSingle("messages", str_sensor);
+//dtostrf(timeSinceLastLoraMessage/1000, 4, 3, str_sensor);
+//AdafruitiomqttSingle("messages", str_sensor);
 delay(100);
 Adafruitioclient.disconnect();
 
