@@ -17,7 +17,7 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <RH_RF95.h> //ver 1.85
+#include <RH_RF95.h> //ver 1.89
 #include "RadioSettings.h"
 #include <ArduinoJson.h>
 #include <NeoPixelBus.h> //https://github.com/Makuna/NeoPixelBus/
@@ -276,7 +276,7 @@ void loop()
       //set LEDs based on tank level
       if (tank_level <= 1)
       {
-        theaterChaseRainbow(30, 6);
+        //theaterChaseRainbow(30, 6);
         strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, redfull);
         strip.SetPixelColor(2, redfull);
@@ -287,7 +287,7 @@ void loop()
       } //builtin LED flash (pwm channel 0)
       else if (tank_level <= 50)
       {
-        theaterChaseRainbow(10,6);
+        //theaterChaseRainbow(10,6);
         ledcWrite(0, 128); //LED flash (pwm channel 0)
         strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, orange);
@@ -297,7 +297,7 @@ void loop()
       }
       else if (tank_level <= 80)
       {
-        theaterChaseRainbow(2,6);
+        //theaterChaseRainbow(2,6);
         ledcWrite(0, 128); //LED off (pwm channel 0)
         strip.SetPixelColor(0, greenlow); //power indicator
         strip.SetPixelColor(1, yellow);
@@ -357,10 +357,6 @@ void loop()
      makeIFTTTRequest();}
   delay(8000);
 
-
- if (millis() - startMillis >= 7200000) {//send voltage every 2 hours
-dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 3, str_sensor);
-AdafruitiomqttSingle("voltage", str_sensor);}
 
 }
 
@@ -689,27 +685,27 @@ void UbidotsSendAll(){
 
 void AdafruitSendAll ()
 {
-dtostrf((int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+dtostrf((int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte), 3, 0, str_sensor); /* 3 is mininum width, 0 is precision; float value is copied onto str_sensor*/
 AdafruitiomqttSingle("level-3", str_sensor);
 
-dtostrf((int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+dtostrf((int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), 3, 0, str_sensor); 
 AdafruitiomqttSingle("level-2", str_sensor);
 
-dtostrf((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+dtostrf((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), 3, 0, str_sensor); 
 AdafruitiomqttSingle("level-1", str_sensor);
 
-
-
-
 float sensor2 = temperatureDecompress(rxpayload.temperature);
-dtostrf(sensor2, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+dtostrf(sensor2, 4, 3, str_sensor); 
 AdafruitiomqttSingle("temperature", str_sensor);
 
-//dtostrf(tank_level, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-//AdafruitiomqttSingle("tank_level", str_sensor);
+dtostrf(tank_level, 3, 0, str_sensor); 
+AdafruitiomqttSingle("tank_level", str_sensor);
 
-dtostrf((int)rf95.lastRssi(), 4, 3, str_sensor);
+dtostrf((int)rf95.lastRssi(), 4, 0, str_sensor);
 AdafruitiomqttSingle("rx-RSSI", str_sensor);
+
+dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 0, str_sensor);
+AdafruitiomqttSingle("voltage", str_sensor);
 
 //dtostrf(timeSinceLastLoraMessage/1000, 4, 3, str_sensor);
 //AdafruitiomqttSingle("messages", str_sensor);
