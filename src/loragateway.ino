@@ -1,6 +1,10 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
+<<<<<<< HEAD
 // 24 Jan 2021
+=======
+// 1 feb 2020
+>>>>>>> master
 //works
 
 /////LEDs
@@ -457,6 +461,7 @@ while (!Adafruitioclient.connected())
       // Wait  before retrying
       delay(2000*attempts);
      }
+<<<<<<< HEAD
     }
   
   
@@ -486,6 +491,37 @@ while (!Adafruitioclient.connected())
       // Wait 2 seconds before retrying
       delay(2000);
     }
+=======
+    }
+  
+  
+#if defined (EnableUbidots)
+  attempts = 1;
+
+  while (!Ubidotsclient.connected())
+  {
+    if (attempts > MaxAttempts)
+      break;
+    attempts = attempts + 1;
+    Serial.println("Attempting Ubidots MQTT connection...");
+
+    // Attemp to connect MQTT
+    if (Ubidotsclient.connect(MQTT_CLIENT_NAME, UBIDOTSTOKEN, ""))
+    {
+      Serial.println("Ubidots Connected");
+      AdafruitiomqttSingle("messages", "Ubidots MQTT Connected");
+      sprintf(text2, "Ubi Mqtt connect attempts %d", attempts - 1);
+        }
+    else
+    {
+      Serial.print("Failed, rc=");
+      Serial.print(Ubidotsclient.state());
+
+      Serial.println(" Ubidots try again in 2 seconds");
+      // Wait 2 seconds before retrying
+      delay(2000);
+    }
+>>>>>>> master
   }
   sprintf(text3, "Ubi Mqtt state %d", Ubidotsclient.state() );
   AdafruitiomqttSingle("messages", text3);
@@ -829,6 +865,7 @@ void interruptReboot()
   Serial.print("Rebooting .. \n\n");
   esp_restart_noos();
 }
+<<<<<<< HEAD
 
 // Make an HTTP request to the IFTTT web service
 void makeIFTTTRequest() {
@@ -884,5 +921,63 @@ void makeIFTTTRequest() {
   Serial.println("\nclosing connection");
   client.stop(); 
 }
+=======
+
+// Make an HTTP request to the IFTTT web service
+void makeIFTTTRequest() {
+  Serial.print("Connecting to "); 
+  Serial.print(server);
+  
+  WiFiClient client;
+  int retries = 5;
+  while(!!!client.connect(server, 80) && (retries-- > 0)) {
+    Serial.print(".");
+  }
+  Serial.println();
+  if(!!!client.connected()) {
+    Serial.println("Failed to connect...");
+  }
+  
+  Serial.print("Request resource: "); 
+  Serial.println(resource);
+
+  // get capacitance
+  unsigned int valonepoint1 = Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte);
+  unsigned int valonepoint2 = Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte);
+  unsigned int valonepoint3 = Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte);
+  
+  
+  String jsonObject = String("{\"value1\":\"") + valonepoint1 + ", " + valonepoint2 + ", " + valonepoint3 +  "\",\"value2\":\"" + ESP.getFreeHeap()+ ", " + millis()/1000
+                      + "\",\"value3\":\"" + batteryVoltageDecompress(rxpayload.voltage) + ", " + temperatureDecompress(rxpayload.temperature) + "\"}";
+  Serial.println(jsonObject);
+                      
+  // Comment the previous line and uncomment the next line to publish temperature readings in Fahrenheit                    
+  /*String jsonObject = String("{\"value1\":\"") + (1.8 * bme.readTemperature() + 32) + "\",\"value2\":\"" 
+                      + (bme.readPressure()/100.0F) + "\",\"value3\":\"" + bme.readHumidity() + "\"}";*/
+                      
+  client.println(String("POST ") + resource + " HTTP/1.1");
+  client.println(String("Host: ") + server); 
+  client.println("Connection: close\r\nContent-Type: application/json");
+  client.print("Content-Length: ");
+  client.println(jsonObject.length());
+  client.println();
+  client.println(jsonObject);
+        
+  int timeout = 5 * 10; // 5 seconds             
+  while(!!!client.available() && (timeout-- > 0)){
+    delay(100);
+  }
+  if(!!!client.available()) {
+    Serial.println("No response...");
+  }
+  while(client.available()){
+    Serial.write(client.read());
+  }
+  
+  Serial.println("\nclosing connection");
+  client.stop(); 
+}
+
+>>>>>>> master
 
 
