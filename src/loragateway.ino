@@ -1,10 +1,6 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
-<<<<<<< HEAD
-// 30 Oct 2017
-=======
-// 1 feb 2020
->>>>>>> master
+// 24 Jan 2021
 //works
 
 /////LEDs
@@ -12,13 +8,6 @@
 //1+2+3 tank full->off, tank full->80% yellow ,tank 50% full->orange, tank 40% full->red
 //6 blue is no recieving lora messages
 //7 white if wifi/mqtt loss of connection
-<<<<<<< HEAD
-/////////
-
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <RH_RF95.h> //ver 1.85
-=======
 //7 pink if adafruit wifi/mqtt loss of connection
 /////////
 
@@ -29,19 +18,10 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <RH_RF95.h> //ver 1.89
->>>>>>> master
 #include "RadioSettings.h"
 #include <ArduinoJson.h>
 #include <NeoPixelBus.h> //https://github.com/Makuna/NeoPixelBus/
 
-<<<<<<< HEAD
-// WiFi access credentials
-#define WIFI_SSID "Penryn"                         // WiFi SSID
-#define WIFI_PASSWORD "hoooverr"                   // WiFI Password
-
-
-WiFiClient wificlient;
-=======
 //PINS
 #define RFM95_CS 18
 #define RFM95_RST 14
@@ -60,7 +40,6 @@ WiFiClient wificlient;
 WiFiClient wificlientUbidots;
 #endif
 WiFiClient wificlientAdafruitIO;
->>>>>>> master
 
 /****************************************
  * MQTT
@@ -70,10 +49,6 @@ void ubidotsmqttJson(char *varable1, int value1, char *varable2, int value2, cha
 #define VARIABLE_LABEL "MQTTsensor2"  // Assing the variable label
 #define DEVICE_LABEL "esp"            // Assig the device label
 #define MQTT_CLIENT_NAME "OLtBrXVH6i" // MQTT client Name, please enter your own 8-12 alphanumeric character ASCII string;
-<<<<<<< HEAD
-#define TOKEN "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171" // Ubidots TOKEN
-char mqttBroker[] = "things.ubidots.com";
-=======
 #define UBIDOTSTOKEN "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171" // Ubidots TOKEN
 char UbidotsmqttBroker[] = "things.ubidots.com";
 void adfruitiomqttSingle(char const *varable, char const *value);
@@ -83,7 +58,6 @@ String clientId = "ESP32Client-cc5246fdcz";
 #define ADAFRUIT_MQTT_CLIENT_NAME "distiller" // 
 #define ADAFRUITIOTOKEN "e3758c24375742ccb361c88e38d638f3" // ada TOKEN
 char AdafruitiomqttBroker[] = "io.adafruit.com";
->>>>>>> master
 char payload[100];
 char topic[150];
 char str_sensor[10];
@@ -93,11 +67,8 @@ PubSubClient Ubidotsclient(wificlientUbidots);
 #endif
 PubSubClient Adafruitioclient(wificlientAdafruitIO);
 
-<<<<<<< HEAD
-=======
 /**********************************************/
 //FUNCTION DECLARATIONS
->>>>>>> master
 void callback(char *topic, byte *payload, unsigned int length);
 void reconnect();
 void _initLoRa();
@@ -108,52 +79,24 @@ void UbidotsSendAll();
 void AdafruitiomqttSingle(char const *varable, char const *value);
 void neopixel_clear();
 void rainbow(uint8_t wait);
-<<<<<<< HEAD
-void theaterChaseRainbow(uint8_t wait);
-//int32_t Wheel(byte WheelPos);
-RgbColor Wheel();
-
-=======
 void theaterChase(uint32_t color, int wait);
 void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth);
 void interruptReboot();// reboot if watchdog times out
 void makeIFTTTRequest();
 RgbColor Wheel();
->>>>>>> master
 long batteryVoltageDecompress(byte batvoltage);
 float temperatureDecompress(byte temperature);
 unsigned int Combine2bytes(byte x_high, byte x_low);
 int calculate_tank_level(int sensor1, int sensor2, int sensor3);
 /*****************************************/
 
-<<<<<<< HEAD
-int tank_level = 0; //derived from multiple sensors
-
-
-// JSON Buffer
-DynamicJsonBuffer jsonBuffer;
-//PINS
-#define RFM95_CS 18
-#define RFM95_RST 14
-#define RFM95_INT 26
-const int PIXEL_PIN1 = 21;
-#define BUILTIN_BLUE_LED 2
-=======
->>>>>>> master
 
 
 
-<<<<<<< HEAD
-static const RH_RF95::ModemConfig radiosetting = {
-    BW_SETTING << 4 | CR_SETTING << 1 | ImplicitHeaderMode_SETTING,
-    SF_SETTING << 4 | CRC_SETTING << 2,
-    LowDataRateOptimize_SETTING << 3 | ACGAUTO_SETTING << 2};
-=======
 int tank_level = 0; //derived from multiple sensors
 unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed
 unsigned long timeSinceLastLoraMessage;//time since last lora message rxed
 DynamicJsonBuffer jsonBuffer; // JSON Buffer
->>>>>>> master
 
 struct payloadDataStruct
 {
@@ -169,10 +112,6 @@ struct payloadDataStruct
   byte capsensor3Highbyte;
 } rxpayload;
 
-<<<<<<< HEAD
-unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed
-=======
->>>>>>> master
 
 
 
@@ -199,16 +138,11 @@ RgbColor green(0, colorSaturation, 0);
 RgbColor greenlow(0, colorSaturation/4, 0);
 RgbColor blue(0, 0, colorSaturation);
 RgbColor white(colorSaturation/2);
-<<<<<<< HEAD
-=======
 RgbColor pink(colorSaturation,colorSaturation/3,colorSaturation/3);
->>>>>>> master
 RgbColor black(0);
 RgbColor orange(colorSaturation * 0.8, colorSaturation * 0.35, 0);
 RgbColor yellow(colorSaturation * 0.75, colorSaturation * 0.75, 0);
 
-<<<<<<< HEAD
-=======
 
 //IFTT
 const char* resource = "/trigger/water_level/with/key/daSd2eiJFlysvFuIf-QZX8";
@@ -220,7 +154,6 @@ unsigned long IFTTinterval = 60*30 ;// interval in seconds between IFTTT posts
 hw_timer_t *watchdogTimer = NULL;
 hw_timer_t *timerread = NULL;
 int watchInt = 480000000; //set time in uS must be fed within this time or reboot
->>>>>>> master
 
 
 /*----------------------------------------------------------------------------
@@ -236,15 +169,12 @@ void setup()
   strip.SetPixelColor(0, orange); //power indicator
   strip.Show();
 
-<<<<<<< HEAD
-=======
  //setup watchdog
   watchdogTimer = timerBegin(0, 80, true); //timer 0 divisor 80
   timerAlarmWrite(watchdogTimer, watchInt, false); // set time in uS must be fed within this time or reboot
   timerAttachInterrupt(watchdogTimer, & interruptReboot, true);
   timerAlarmEnable(watchdogTimer);  // enable interrupt
 
->>>>>>> master
   //client2.setDebug(true); // Uncomment this line to set DEBUG on
   //set up 1HZ pwm on LED
   pinMode(BUILTIN_BLUE_LED, OUTPUT);
@@ -269,11 +199,8 @@ void setup()
   Adafruitioclient.setServer(AdafruitiomqttBroker, 1883);
   _checkWifi_mqtt();
   LoraMessageTimer = millis(); //initialise timer (to calculate time since last lora message was received)
-<<<<<<< HEAD
-=======
   delay(2000);
   AdafruitiomqttSingle("messages", "booting");
->>>>>>> master
 }
 
 /*----------------------------------------------------------------------------
@@ -284,10 +211,7 @@ void loop()
 {
   //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
   //rf95.printRegisters(); //th
-<<<<<<< HEAD
-=======
   timerWrite(watchdogTimer, 0); // reset timer feed dog
->>>>>>> master
   strip.SetPixelColor(0, greenlow); //power indicator
   strip.Show();
 
@@ -303,10 +227,7 @@ void loop()
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-<<<<<<< HEAD
-=======
     timeSinceLastLoraMessage = millis()- LoraMessageTimer;
->>>>>>> master
     LoraMessageTimer = millis(); //reset timer (to calculate time since last lora message was received)
 
     if (rf95.recv(buf, &len))
@@ -355,12 +276,8 @@ void loop()
       //set LEDs based on tank level
       if (tank_level <= 1)
       {
-<<<<<<< HEAD
-        theaterChaseRainbow(30);
-=======
         //theaterChaseRainbow(30, 6);
         strip.SetPixelColor(0, greenlow); //power indicator
->>>>>>> master
         strip.SetPixelColor(1, redfull);
         strip.SetPixelColor(2, redfull);
         strip.SetPixelColor(3, redfull);
@@ -370,14 +287,9 @@ void loop()
       } //builtin LED flash (pwm channel 0)
       else if (tank_level <= 50)
       {
-<<<<<<< HEAD
-        theaterChaseRainbow(10);
-        ledcWrite(0, 128); //LED flash (pwm channel 0)
-=======
         //theaterChaseRainbow(10,6);
         ledcWrite(0, 128); //LED flash (pwm channel 0)
         strip.SetPixelColor(0, greenlow); //power indicator
->>>>>>> master
         strip.SetPixelColor(1, orange);
         strip.SetPixelColor(2, orange);
         strip.SetPixelColor(3, orange);
@@ -385,14 +297,9 @@ void loop()
       }
       else if (tank_level <= 80)
       {
-<<<<<<< HEAD
-        theaterChaseRainbow(2);
-        ledcWrite(0, 128); //LED off (pwm channel 0)
-=======
         //theaterChaseRainbow(2,6);
         ledcWrite(0, 128); //LED off (pwm channel 0)
         strip.SetPixelColor(0, greenlow); //power indicator
->>>>>>> master
         strip.SetPixelColor(1, yellow);
         strip.SetPixelColor(2, yellow);
         strip.SetPixelColor(3, yellow);
@@ -401,10 +308,7 @@ void loop()
       else
       {
         ledcWrite(0, 0); //LED off (pwm channel 0)
-<<<<<<< HEAD
-=======
         strip.SetPixelColor(0, greenlow); //power indicator
->>>>>>> master
         strip.SetPixelColor(1, black);
         strip.SetPixelColor(2, black);
         strip.SetPixelColor(3, black);
@@ -433,46 +337,17 @@ void loop()
       Ubidotsclient.loop(); //Mqtt
       #endif
       delay(1000);
-<<<<<<< HEAD
-      ubidotsmqttJson("local-rssi", (int)rf95.lastRssi(),
-                      "rssi", -rxpayload.rssi, "voltage", batteryVoltageDecompress(rxpayload.voltage));
-
-      delay(3000);
-      ubidotsmqttJson("level", (int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte),
-                      "level-2", (int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), "level-3", (int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
-
-      delay(1000);
-      sensor = rf95.frequencyError();
-      dtostrf(sensor, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-      ubidotsmqttSingle("frequency-error", str_sensor);
-
-      dtostrf(tank_level, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-      ubidotsmqttSingle("CalcLevel", str_sensor);
-
-      /*client2.add("59d864b6c03f972cdb9e33e6", -rxpayload.rssi);
-     client2.add("59dee274c03f976a87c2594b", (int)rf95.lastRssi());
-     client2.add("59d864a1c03f972cdb9e33e5", batteryVoltageDecompress(rxpayload.voltage));
-     client2.add("59d85600c03f97202c9ff2c0",temperatureDecompress(rxpayload.temperature))  ;
-     client2.sendAll(false);
-     client2.add("59e7b649c03f972d175ee2e2",(int)Combine2bytes(rxpayload.capsensor1Highbyte,rxpayload.capsensor1Lowbyte));
-     client2.add("5a654f7cc03f9724e9db682c",(int)Combine2bytes(rxpayload.capsensor2Highbyte,rxpayload.capsensor2Lowbyte));
-     client2.sendAll(false);*/
-=======
       Adafruitioclient.loop(); //Mqtt
       delay(1000);
 
 
 
->>>>>>> master
     }
     else
     {
       //Serial.println("Receive failed");
     }
   }
-<<<<<<< HEAD
-  client.loop(); //Mqtt
-=======
   //needed if you want to receive mqtt:
   //Ubidotsclient.loop(); //Mqtt
   //Adafruitioclient.loop(); //Mqtt
@@ -482,9 +357,7 @@ void loop()
      makeIFTTTRequest();}
   delay(8000);
 
->>>>>>> master
 
-  delay(10000);
 }
 
 void donothing()
@@ -507,40 +380,6 @@ void _initWiFi()
       Serial.println(" Waiting for WiFi...");
       Serial.println(waiting);
     }
-<<<<<<< HEAD
-
-    delay(1000);
-  }
-
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    Serial.println("WiFi Connected!");
-  }
-}
-
-void _checkWifi_mqtt()
-{
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    _initWiFi();
-    delay(1000);
-  }
-  if (!client.connected())
-  {
-    Serial.println("reconecting/connecting mqtt");
-    reconnect();
-    if (!client.connected())
-    {
-      strip.SetPixelColor(7, white); //turn error LED on
-      strip.Show();
-    }
-  }
-  else
-  {
-    strip.SetPixelColor(7, black);
-    strip.Show();
-  }
-=======
 
     delay(1000);
   }
@@ -652,7 +491,6 @@ while (!Adafruitioclient.connected())
   AdafruitiomqttSingle("messages", text3);
 #endif
 
->>>>>>> master
 }
 
 
@@ -739,50 +577,6 @@ void callback(char *topic, byte *payload, unsigned int length)
   Serial.println(topic);
 }
 
-<<<<<<< HEAD
-void reconnect()
-{
-  // Loop a few times until we're reconnected
-  int attempts = 10;
-  while (!client.connected())
-  {
-    if (attempts <= 0)
-      break;
-    attempts = attempts - 1;
-    Serial.println("Attempting MQTT connection...");
-
-    // Attemp to connect MQTT
-    if (client.connect(MQTT_CLIENT_NAME, TOKEN, ""))
-    {
-      Serial.println("Connected");
-    }
-    else
-    {
-      Serial.print("Failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 2 seconds");
-      // Wait 2 seconds before retrying
-      delay(2000);
-    }
-  }
-}
-
-void ubidotsmqttSingle(char const *varable, char const *value)
-{
-  //format topic and payload, then publish single data point
-  sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
-
-  sprintf(payload, "%s", "");                                   // Cleans the payload
-  sprintf(payload, "%s {\"%s\": %s}", payload, varable, value); // Adds the value
-  Serial.print("Publishing data to Ubidots Cloud");
-  Serial.print(" topic= ");
-  Serial.println(topic);
-  Serial.println(" payload= ");
-  Serial.println(payload);
-  client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
-
-  //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
-=======
 
 void ubidotsmqttSingle(char const *varable, char const *value)
 {
@@ -859,39 +653,9 @@ void AdafruitiomqttSingle(char const *varable, char const *value)
   Serial.println(value);
   Adafruitioclient.publish(topic, value); 
   delay(2500);
->>>>>>> master
 }
 
-void ubidotsmqttTriple(char *varable1, int value1, char *varable2, char *value2, char *varable3, char *value3)
-{
-  //format topic and payload, then publish single data point
-  sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
-  char str_value1[10];
-  char str_value2[10];
-  char str_value3[10];
-  dtostrf(value1, 4, 2, str_value1);
 
-  sprintf(payload, "%s", ""); // Cleans the payload
-  //sprintf(payload, "%s {\"%s\": %s}", payload, varable, value);// Adds the value
-  sprintf(payload, "%s {\"%s\": %s\", \"%s\": %s, \"%s\": %s}", payload, varable1, value1, varable2, value2, varable3, value3); // Adds the value
-  Serial.print("Publishing data to Ubidots Cloud");
-  Serial.print(" topic= ");
-  Serial.println(topic);
-  Serial.println(" payload= ");
-  Serial.println(payload);
-  client.publish(topic, payload); //eg client.publish(/v1.6/devices/esp,{"MQTTsensor": {"value": 3.10}})
-
-<<<<<<< HEAD
-  //example client.publish(topic, "{\"temperature\": 10, \"humidity\": 50}");
-}
-
-void ubidotsmqttJson(char *varable1, int value1, char *varable2, int value2, char *varable3, int value3)
-{
-
-  StaticJsonBuffer<100> jsonBuffer;
-  char JSONmessageBuffer[100];
-  JsonObject &root = jsonBuffer.createObject();
-=======
 void UbidotsSendAll(){
 
     float sensor = temperatureDecompress(rxpayload.temperature);
@@ -929,29 +693,11 @@ AdafruitiomqttSingle("level-2", str_sensor);
 
 dtostrf((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), 3, 0, str_sensor); 
 AdafruitiomqttSingle("level-1", str_sensor);
->>>>>>> master
 
 float sensor2 = temperatureDecompress(rxpayload.temperature);
 dtostrf(sensor2, 4, 3, str_sensor); 
 AdafruitiomqttSingle("temperature", str_sensor);
 
-<<<<<<< HEAD
-  root.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
-  Serial.println(JSONmessageBuffer);
-  sprintf(topic, "%s%s", "/v1.6/devices/", DEVICE_LABEL);
-  Serial.print("Publishing data to Ubidots Cloud");
-  Serial.print(" topic= ");
-  Serial.println(topic);
-  Serial.println(" payload= ");
-  Serial.println(JSONmessageBuffer);
-  client.publish(topic, JSONmessageBuffer);
-}
-
-void rainbow(uint8_t wait)
-{
-  uint16_t i, j;
-
-=======
 dtostrf(tank_level, 3, 0, str_sensor); 
 AdafruitiomqttSingle("tank_level", str_sensor);
 
@@ -973,7 +719,6 @@ void rainbow(uint8_t wait)
 {
   uint16_t i, j;
 
->>>>>>> master
   for (j = 0; j < 256; j++)
   {
     for (i = 0; i < NUM_PIXELS; i++)
@@ -985,26 +730,6 @@ void rainbow(uint8_t wait)
   }
 }
 
-<<<<<<< HEAD
-//Theatre-style crawling lights with rainbow effect
-void theaterChaseRainbow(uint8_t wait)
-{
-  for (int j = 0; j < 256; j++)
-  { // cycle all 256 colors in the wheel
-    for (int q = 0; q < 3; q++)
-    {
-      for (int i = 0; i < NUM_PIXELS; i = i + 3)
-      {
-        strip.SetPixelColor(i + q, Wheel((i + j) % 255)); //turn every third pixel on
-      }
-      strip.Show();
-
-      delay(wait);
-
-      for (int i = 0; i < NUM_PIXELS; i = i + 3)
-      {
-        strip.SetPixelColor(i + q, 0); //turn every third pixel off
-=======
 
 void theaterChase(uint32_t color, int wait) {
   for(int a=0; a<10; a++) {  // Repeat 10 times...
@@ -1013,7 +738,6 @@ void theaterChase(uint32_t color, int wait) {
       // 'c' counts up from 'b' to end of strip in steps of 3...
       for(int c=b; c< NUM_PIXELS; c += 3) {
         strip.SetPixelColor(c, color); // Set pixel 'c' to value 'color'
->>>>>>> master
       }
       strip.Show(); // Update strip with new contents
       delay(wait);  // Pause for a moment
@@ -1021,8 +745,6 @@ void theaterChase(uint32_t color, int wait) {
   }
 }
 
-<<<<<<< HEAD
-=======
 
 //Theatre-style crawling lights with rainbow effect
 void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth)
@@ -1047,7 +769,6 @@ void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth)
   }
 }
 
->>>>>>> master
 // Input a value 0 to 255 to get a color value.
 // The colours are a transition r - g - b - back to r.
 RgbColor Wheel(uint8_t WheelPos)
@@ -1163,6 +884,5 @@ void makeIFTTTRequest() {
   Serial.println("\nclosing connection");
   client.stop(); 
 }
-
 
 
