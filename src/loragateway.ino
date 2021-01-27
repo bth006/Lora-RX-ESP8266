@@ -1,10 +1,6 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
-<<<<<<< HEAD
 // 24 Jan 2021
-=======
-// 1 feb 2020
->>>>>>> master
 //works
 
 /////LEDs
@@ -44,6 +40,8 @@
 WiFiClient wificlientUbidots;
 #endif
 WiFiClient wificlientAdafruitIO;
+WiFiClient homeAssistant;
+
 
 /****************************************
  * MQTT
@@ -54,9 +52,13 @@ void ubidotsmqttJson(char *varable1, int value1, char *varable2, int value2, cha
 #define DEVICE_LABEL "esp"            // Assig the device label
 #define MQTT_CLIENT_NAME "OLtBrXVH6i" // MQTT client Name, please enter your own 8-12 alphanumeric character ASCII string;
 #define UBIDOTSTOKEN "A1E-0V3Qu4hZfmUA0uOtVMt4rFPtVaz171" // Ubidots TOKEN
+#define HATOKEN "koh5eixie2pae8vah5ton1saay7AQuaph4aejoaLae5toh6Bahx6aePheiseiMiP"
 char UbidotsmqttBroker[] = "things.ubidots.com";
+char HomeAssistantBroker[]= "192.168.1.198";
 void adfruitiomqttSingle(char const *varable, char const *value);
 void adfruitiomqttJson(char *varable1, int value1, char *varable2, int value2, char *varable3, int value3);
+void reconnectHomeAssistBroker();
+void HAmqttSingle(char const *varable, char const *value);
 String clientId = "ESP32Client-cc5246fdcz";
   
 #define ADAFRUIT_MQTT_CLIENT_NAME "distiller" // 
@@ -70,6 +72,7 @@ char str_sensor[10];
 PubSubClient Ubidotsclient(wificlientUbidots);
 #endif
 PubSubClient Adafruitioclient(wificlientAdafruitIO);
+PubSubClient HomeAssistantclient(homeAssistant);
 
 /**********************************************/
 //FUNCTION DECLARATIONS
@@ -87,6 +90,8 @@ void theaterChase(uint32_t color, int wait);
 void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth);
 void interruptReboot();// reboot if watchdog times out
 void makeIFTTTRequest();
+void ProcessTanKPacket();
+float ProcessIspindlePacket();
 RgbColor Wheel();
 long batteryVoltageDecompress(byte batvoltage);
 float temperatureDecompress(byte temperature);
@@ -154,10 +159,19 @@ const char* server = "maker.ifttt.com";
 unsigned long startMillis = 0;//used for scheduling IFTTT posts
 unsigned long IFTTinterval = 60*30 ;// interval in seconds between IFTTT posts
 
-//watcdog timer
+//watchdog timer
 hw_timer_t *watchdogTimer = NULL;
 hw_timer_t *timerread = NULL;
 int watchInt = 480000000; //set time in uS must be fed within this time or reboot
+
+
+//Thermister constants and varables
+#define NUMSAMPLES 10
+#define ACOEFFICIENT 0.8483803702e-3
+#define BCOEFFICIENT 2.572522990e-4
+#define CCOEFFICIENT 1.703807621e-7
+#define RESISTOR 10060  
+//long ADCtherm;
 
 
 /*----------------------------------------------------------------------------
@@ -188,7 +202,8 @@ void setup()
 
   Serial.begin(57600);
   delay(1000);
-  _initLoRa();
+  ///////////////////////////////////////need to reanable lora after testing
+  //_initLoRa();
 
   rf95.setModemRegisters(&radiosetting);
   _initWiFi();
@@ -201,10 +216,16 @@ void setup()
     Ubidotsclient.setCallback(callback);
  #endif   
   Adafruitioclient.setServer(AdafruitiomqttBroker, 1883);
+  HomeAssistantclient.setServer(HomeAssistantBroker,1883);
   _checkWifi_mqtt();
   LoraMessageTimer = millis(); //initialise timer (to calculate time since last lora message was received)
   delay(2000);
   AdafruitiomqttSingle("messages", "booting");
+
+  reconnectHomeAssistBroker();
+  dtostrf(2.5 , 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/edvices/ESP32", str_sensor);
+  
 }
 
 /*----------------------------------------------------------------------------
@@ -238,6 +259,13 @@ void loop()
     {
       delay(10);
 
+       if (rxpayload.nodeID==1)
+        {ProcessTanKPacket();}
+       else if (rxpayload.nodeID==2)
+        {ProcessIspindlePacket();}
+       else Serial.println("NodeID not found");
+       
+       
       char bufChar[len];
       for (int i = 0; i < len; i++)
       {
@@ -251,98 +279,7 @@ void loop()
 
       memcpy(&rxpayload, buf, sizeof(rxpayload));
 
-      tank_level = calculate_tank_level((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), (int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), (int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
 
-      //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
-      Serial.print(" nodeID = ");
-      Serial.print(rxpayload.nodeID);
-      Serial.print(" remote voltage comp = ");
-      Serial.print((rxpayload.voltage));
-      Serial.print(" remote voltage = ");
-      Serial.print(batteryVoltageDecompress(rxpayload.voltage));
-      Serial.print(" remote rssi = ");
-      Serial.print(rxpayload.rssi);
-      Serial.print(" Local RSSI: ");
-      Serial.print(rf95.lastRssi(), DEC);
-      Serial.print(" Local SNR: ");
-      Serial.print(rf95.lastSNR(), DEC);
-      Serial.print(" cap1= ");
-      Serial.print(Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte));
-      Serial.print(" cap2= ");
-      Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte));
-      Serial.print(" cap3= ");
-      Serial.print(Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
-      Serial.print(" tank level= ");
-      Serial.print(tank_level);
-      ///////////////////////MQTT Code
-      //sendMessage(String(bufChar));
-
-      //set LEDs based on tank level
-      if (tank_level <= 1)
-      {
-        //theaterChaseRainbow(30, 6);
-        strip.SetPixelColor(0, greenlow); //power indicator
-        strip.SetPixelColor(1, redfull);
-        strip.SetPixelColor(2, redfull);
-        strip.SetPixelColor(3, redfull);
-        strip.Show();
-
-        ledcWrite(0, 128);
-      } //builtin LED flash (pwm channel 0)
-      else if (tank_level <= 50)
-      {
-        //theaterChaseRainbow(10,6);
-        ledcWrite(0, 128); //LED flash (pwm channel 0)
-        strip.SetPixelColor(0, greenlow); //power indicator
-        strip.SetPixelColor(1, orange);
-        strip.SetPixelColor(2, orange);
-        strip.SetPixelColor(3, orange);
-        strip.Show();
-      }
-      else if (tank_level <= 80)
-      {
-        //theaterChaseRainbow(2,6);
-        ledcWrite(0, 128); //LED off (pwm channel 0)
-        strip.SetPixelColor(0, greenlow); //power indicator
-        strip.SetPixelColor(1, yellow);
-        strip.SetPixelColor(2, yellow);
-        strip.SetPixelColor(3, yellow);
-        strip.Show();
-      }
-      else
-      {
-        ledcWrite(0, 0); //LED off (pwm channel 0)
-        strip.SetPixelColor(0, greenlow); //power indicator
-        strip.SetPixelColor(1, black);
-        strip.SetPixelColor(2, black);
-        strip.SetPixelColor(3, black);
-        strip.Show();
-      }
-
-      // Send a reply to sensor
-      //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
-      uint8_t ack[1];
-      // the acknolement consists of an ack identiferer followed by nodeID
-      ack[0] = (uint8_t)170; //ack identifier 170=10101010
-      ack[1] = (uint8_t)rxpayload.nodeID;
-      rf95.send(ack, 2);
-      //rf95.send(outgoingData, sizeof(outgoingData));
-      rf95.waitPacketSent();
-
-      //MQTT SEND/////////////////////////////////
-      _checkWifi_mqtt();
-      
-      AdafruitSendAll ();
-      //wificlientAdafruitIO.stop();
-      delay(2000);
-      _checkWifi_mqtt();
-      #if defined (EnableUbidots)
-      UbidotsSendAll();      
-      Ubidotsclient.loop(); //Mqtt
-      #endif
-      delay(1000);
-      Adafruitioclient.loop(); //Mqtt
-      delay(1000);
 
 
 
@@ -428,6 +365,42 @@ void _checkWifi_mqtt()
   
 }
 
+
+void reconnectHomeAssistBroker()
+{
+  // Loop a few times until we're reconnected
+  int attempts =0;
+  int MaxAttempts = 4;
+  char text1[30];
+  char text2[30];
+  char text3[30];
+
+while (!HomeAssistantclient.connected())
+    {
+    if (attempts > MaxAttempts)
+      break;
+    attempts = attempts + 1;
+    Serial.println("Attempting HA MQTT connection...");
+
+    // Attemp to connect MQTT
+    if    (HomeAssistantclient.connect("esp32 therm","homeassistant",HATOKEN))// password needed??/
+     {
+      Serial.print("HA MQTT Connected attempt:");Serial.println(attempts -1);
+      //AdafruitiomqttSingle("messages", "Ada MQTT Connected");
+      //AdafruitiomqttSingle("messages", attempts);
+      //sprintf(text1, "Ada Mqtt conn attempts %d", attempts -1);
+      //AdafruitiomqttSingle("messages", text1);
+     }
+    else
+     {
+      Serial.print("Failed, rc=");
+      Serial.print(HomeAssistantclient.state());
+      Serial.println(" HA Mqtt try again in 2 seconds");
+      // Wait  before retrying
+      delay(2000*attempts);
+     }
+    }
+}
 void reconnect()
 {
   // Loop a few times until we're reconnected
@@ -461,7 +434,6 @@ while (!Adafruitioclient.connected())
       // Wait  before retrying
       delay(2000*attempts);
      }
-<<<<<<< HEAD
     }
   
   
@@ -491,37 +463,6 @@ while (!Adafruitioclient.connected())
       // Wait 2 seconds before retrying
       delay(2000);
     }
-=======
-    }
-  
-  
-#if defined (EnableUbidots)
-  attempts = 1;
-
-  while (!Ubidotsclient.connected())
-  {
-    if (attempts > MaxAttempts)
-      break;
-    attempts = attempts + 1;
-    Serial.println("Attempting Ubidots MQTT connection...");
-
-    // Attemp to connect MQTT
-    if (Ubidotsclient.connect(MQTT_CLIENT_NAME, UBIDOTSTOKEN, ""))
-    {
-      Serial.println("Ubidots Connected");
-      AdafruitiomqttSingle("messages", "Ubidots MQTT Connected");
-      sprintf(text2, "Ubi Mqtt connect attempts %d", attempts - 1);
-        }
-    else
-    {
-      Serial.print("Failed, rc=");
-      Serial.print(Ubidotsclient.state());
-
-      Serial.println(" Ubidots try again in 2 seconds");
-      // Wait 2 seconds before retrying
-      delay(2000);
-    }
->>>>>>> master
   }
   sprintf(text3, "Ubi Mqtt state %d", Ubidotsclient.state() );
   AdafruitiomqttSingle("messages", text3);
@@ -688,6 +629,19 @@ void AdafruitiomqttSingle(char const *varable, char const *value)
   Serial.println(" payload= ");
   Serial.println(value);
   Adafruitioclient.publish(topic, value); 
+  delay(2500);
+}
+
+void HAmqttSingle(char const *varable, char const *value)
+{
+  //format topic and payload, then publish single data point
+  sprintf(topic,"%s", varable);
+  Serial.print("Publishing data to HA");
+  Serial.print(" topic= ");
+  Serial.println(topic);
+  Serial.println(" payload= ");
+  Serial.println(value);
+  HomeAssistantclient.publish(topic, value, true); 
   delay(2500);
 }
 
@@ -863,65 +817,9 @@ void neopixel_clear()
 void interruptReboot()
 {
   Serial.print("Rebooting .. \n\n");
-  esp_restart_noos();
+  //esp_restart_noos();removed jan 2021 because command deprecated
+   esp_restart();// also see https://iotassistant.io/esp32/enable-hardware-watchdog-timer-esp32-arduino-ide/ and https://github.com/espressif/arduino-esp32/issues/2304
 }
-<<<<<<< HEAD
-
-// Make an HTTP request to the IFTTT web service
-void makeIFTTTRequest() {
-  Serial.print("Connecting to "); 
-  Serial.print(server);
-  
-  WiFiClient client;
-  int retries = 5;
-  while(!!!client.connect(server, 80) && (retries-- > 0)) {
-    Serial.print(".");
-  }
-  Serial.println();
-  if(!!!client.connected()) {
-    Serial.println("Failed to connect...");
-  }
-  
-  Serial.print("Request resource: "); 
-  Serial.println(resource);
-
-  // get capacitance
-  unsigned int valonepoint1 = Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte);
-  unsigned int valonepoint2 = Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte);
-  unsigned int valonepoint3 = Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte);
-  
-  
-  String jsonObject = String("{\"value1\":\"") + valonepoint1 + ", " + valonepoint2 + ", " + valonepoint3 +  "\",\"value2\":\"" + ESP.getFreeHeap()+ ", " + millis()/1000
-                      + "\",\"value3\":\"" + batteryVoltageDecompress(rxpayload.voltage) + ", " + temperatureDecompress(rxpayload.temperature) + "\"}";
-  Serial.println(jsonObject);
-                      
-  // Comment the previous line and uncomment the next line to publish temperature readings in Fahrenheit                    
-  /*String jsonObject = String("{\"value1\":\"") + (1.8 * bme.readTemperature() + 32) + "\",\"value2\":\"" 
-                      + (bme.readPressure()/100.0F) + "\",\"value3\":\"" + bme.readHumidity() + "\"}";*/
-                      
-  client.println(String("POST ") + resource + " HTTP/1.1");
-  client.println(String("Host: ") + server); 
-  client.println("Connection: close\r\nContent-Type: application/json");
-  client.print("Content-Length: ");
-  client.println(jsonObject.length());
-  client.println();
-  client.println(jsonObject);
-        
-  int timeout = 5 * 10; // 5 seconds             
-  while(!!!client.available() && (timeout-- > 0)){
-    delay(100);
-  }
-  if(!!!client.available()) {
-    Serial.println("No response...");
-  }
-  while(client.available()){
-    Serial.write(client.read());
-  }
-  
-  Serial.println("\nclosing connection");
-  client.stop(); 
-}
-=======
 
 // Make an HTTP request to the IFTTT web service
 void makeIFTTTRequest() {
@@ -978,6 +876,121 @@ void makeIFTTTRequest() {
   client.stop(); 
 }
 
->>>>>>> master
+void ProcessTanKPacket(){
+      tank_level = calculate_tank_level((int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), (int)Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), (int)Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
+
+      //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
+      Serial.print(" nodeID = ");
+      Serial.print(rxpayload.nodeID);
+      Serial.print(" remote voltage comp = ");
+      Serial.print((rxpayload.voltage));
+      Serial.print(" remote voltage = ");
+      Serial.print(batteryVoltageDecompress(rxpayload.voltage));
+      Serial.print(" remote rssi = ");
+      Serial.print(rxpayload.rssi);
+      Serial.print(" Local RSSI: ");
+      Serial.print(rf95.lastRssi(), DEC);
+      Serial.print(" Local SNR: ");
+      Serial.print(rf95.lastSNR(), DEC);
+      Serial.print(" cap1= ");
+      Serial.print(Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte));
+      Serial.print(" cap2= ");
+      Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte));
+      Serial.print(" cap3= ");
+      Serial.print(Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
+      Serial.print(" tank level= ");
+      Serial.print(tank_level);
+      ///////////////////////MQTT Code
+      //sendMessage(String(bufChar));
+
+      //set LEDs based on tank level
+      if (tank_level <= 1)
+      {
+        //theaterChaseRainbow(30, 6);
+        strip.SetPixelColor(0, greenlow); //power indicator
+        strip.SetPixelColor(1, redfull);
+        strip.SetPixelColor(2, redfull);
+        strip.SetPixelColor(3, redfull);
+        strip.Show();
+
+        ledcWrite(0, 128);
+      } //builtin LED flash (pwm channel 0)
+      else if (tank_level <= 50)
+      {
+        //theaterChaseRainbow(10,6);
+        ledcWrite(0, 128); //LED flash (pwm channel 0)
+        strip.SetPixelColor(0, greenlow); //power indicator
+        strip.SetPixelColor(1, orange);
+        strip.SetPixelColor(2, orange);
+        strip.SetPixelColor(3, orange);
+        strip.Show();
+      }
+      else if (tank_level <= 80)
+      {
+        //theaterChaseRainbow(2,6);
+        ledcWrite(0, 128); //LED off (pwm channel 0)
+        strip.SetPixelColor(0, greenlow); //power indicator
+        strip.SetPixelColor(1, yellow);
+        strip.SetPixelColor(2, yellow);
+        strip.SetPixelColor(3, yellow);
+        strip.Show();
+      }
+      else
+      {
+        ledcWrite(0, 0); //LED off (pwm channel 0)
+        strip.SetPixelColor(0, greenlow); //power indicator
+        strip.SetPixelColor(1, black);
+        strip.SetPixelColor(2, black);
+        strip.SetPixelColor(3, black);
+        strip.Show();
+      }
+
+      // Send a reply to sensor
+      //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
+      uint8_t ack[1];
+      // the acknolement consists of an ack identiferer followed by nodeID
+      ack[0] = (uint8_t)170; //ack identifier 170=10101010
+      ack[1] = (uint8_t)rxpayload.nodeID;
+      rf95.send(ack, 2);
+      //rf95.send(outgoingData, sizeof(outgoingData));
+      rf95.waitPacketSent();
+
+      //MQTT SEND/////////////////////////////////
+      _checkWifi_mqtt();
+      
+      AdafruitSendAll ();
+      //wificlientAdafruitIO.stop();
+      delay(2000);
+      _checkWifi_mqtt();
+      #if defined (EnableUbidots)
+      UbidotsSendAll();      
+      Ubidotsclient.loop(); //Mqtt
+      #endif
+      delay(1000);
+      Adafruitioclient.loop(); //Mqtt
+      delay(1000);
+      }
 
 
+      float ProcessIspindlePacket(){
+    int TemperatureADC = 0;
+
+float lnR;
+float ThermResistance;
+float ThermTemperature;
+//float resistor = RESISTOR;
+delay(1);
+
+ TemperatureADC = (int)Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte);
+    Serial.print("TemperatureADC "); Serial.println(TemperatureADC);
+  
+
+
+ ThermResistance = (1023/ TemperatureADC) -1;
+ ThermResistance = RESISTOR / ThermResistance;
+ lnR = log(ThermResistance);
+ ThermTemperature = 1 / (ACOEFFICIENT + BCOEFFICIENT * lnR + CCOEFFICIENT * lnR* lnR *lnR) - 273.15;
+return ThermTemperature;
+
+
+      }
