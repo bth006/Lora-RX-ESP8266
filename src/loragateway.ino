@@ -15,15 +15,10 @@
 //#define EnableUbidots // whether to use ubidots
 
 #include <WiFi.h>
-
 #include <PubSubClient.h>
-
 #include <RH_RF95.h> //ver 1.89
-
 #include "RadioSettings.h"
-
 #include <ArduinoJson.h>
-
 #include <NeoPixelBus.h> //https://github.com/Makuna/NeoPixelBus/
 
 //PINS
@@ -107,12 +102,11 @@ float temperatureDecompress(byte temperature);
 unsigned int Combine2bytes(byte x_high, byte x_low);
 int calculate_tank_level(int sensor1, int sensor2, int sensor3);
 
-void scanwifi();
 /*****************************************/
 
 int tank_level = 0; //derived from multiple sensors
 unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed
-unsigned long timeSinceLastLoraMessage; //time since last lora message rxed
+unsigned long timeSinceLastNode1LoraMessage; //time since last lora message rxed
 DynamicJsonBuffer jsonBuffer; // JSON Buffer
 
 struct payloadDataStruct {
@@ -182,6 +176,7 @@ Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
+  delay(400);
   strip.Begin();
   rainbow(2);
   theaterChase(10000, 200);
@@ -202,11 +197,9 @@ void setup() {
   ledcAttachPin(BUILTIN_BLUE_LED, 0); //attach LED to PWN channel 0
   ledcWrite(0, 0); //led off
 
-  Serial.begin(57600);
+  Serial.begin(115200);
   delay(1000);
-  ///////////////////////////////////////need to reanable lora after testing
-  _initLoRa();
-
+   _initLoRa();
   rf95.setModemRegisters( & radiosetting);
   _initWiFi();
 
@@ -228,7 +221,7 @@ void setup() {
   //dtostrf(ProcessIspindlePacket(), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   //HAmqttSingle("/devices/ESP32", str_sensor);
 //ProcessIspindlePacket() ;
- rf95.printRegisters(); //th
+ //rf95.printRegisters(); //th
 }
 
 /*----------------------------------------------------------------------------
@@ -242,7 +235,7 @@ void loop() {
   strip.SetPixelColor(0, greenlow); //power indicator
   strip.Show();
 
-  if (millis() - LoraMessageTimer >= 1800000) { //turn led on if no lora message for 30 minutes
+  if (millis() - LoraMessageTimer >= 1800000) { //turn led on if no lora Node1 message for 30 minutes
     strip.SetPixelColor(6, blue);
   } else
     strip.SetPixelColor(6, black);
@@ -251,8 +244,7 @@ void loop() {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-    timeSinceLastLoraMessage = millis() - LoraMessageTimer;
-    LoraMessageTimer = millis(); //reset timer (to calculate time since last lora message was received)
+
 
     if (rf95.recv(buf, & len)) {
       delay(10);
@@ -269,7 +261,7 @@ void loop() {
       Serial.println("String(bufChar)==" + String(bufChar));
 
       memcpy( & rxpayload, buf, sizeof(rxpayload));
-      Serial.println("packet rx wit nodeid ");Serial.println(rxpayload.nodeID);
+      Serial.println("packet rx with nodeid ");Serial.println(rxpayload.nodeID);
       
       if (rxpayload.nodeID == 1) {
         ProcessTanKPacket();
@@ -300,7 +292,7 @@ Function : _initWiFi()
 Description : Connect to WiFi access point
 ------------------------------------------------------------------------------*/
 void _initWiFi() {
-   scanwifi();
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
  
   Serial.println("WiFi Connecting");
@@ -382,7 +374,7 @@ void reconnectHomeAssistBroker() {
       Serial.print(HomeAssistantclient.state());
       Serial.println(" HA Mqtt try again in 2 seconds");
       // Wait  before retrying
-      delay(2000 * attempts);
+      delay(2000);
     }
   }
 }
@@ -610,6 +602,7 @@ void HAmqttSingle(char
   Serial.println(topic);
   Serial.println(" payload= ");
   Serial.println(value);
+  reconnectHomeAssistBroker();
   HomeAssistantclient.publish(topic, value, true);
   delay(2500);
 }
@@ -821,6 +814,8 @@ void makeIFTTTRequest() {
 }
 
 void ProcessTanKPacket() {
+  timeSinceLastNode1LoraMessage = millis() - LoraMessageTimer;
+  LoraMessageTimer = millis(); //reset timer (to calculate time since last lora message was received)
   tank_level = calculate_tank_level((int) Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), (int) Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), (int) Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
 
   //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
@@ -914,14 +909,8 @@ float ProcessIspindlePacket() {
   float lnR;
   float ThermResistance;
   float ThermTemperature;
-  //float resistor = RESISTOR;
   delay(1);
-
-  //test
-   //rxpayload.capsensor1Lowbyte= 70;
-   //rxpayload.capsensor1Highbyte= 2;
-   Serial.print("L byte "); Serial.print(rxpayload.capsensor1Lowbyte);Serial.print("Hbyte ");Serial.println(rxpayload.capsensor1Highbyte);
-
+  Serial.print("L byte "); Serial.print(rxpayload.capsensor1Lowbyte);Serial.print("Hbyte ");Serial.println(rxpayload.capsensor1Highbyte);
   TemperatureADC = (int) Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte);
   Serial.print("TemperatureADC ");
   Serial.println(TemperatureADC);
@@ -931,7 +920,6 @@ float ProcessIspindlePacket() {
   ThermTemperature = 1 / (ACOEFFICIENT + BCOEFFICIENT * lnR + CCOEFFICIENT * lnR * lnR * lnR) - 273.15;
   Serial.print("Temperature");Serial.println(ThermTemperature);
 
-  reconnectHomeAssistBroker();
   dtostrf(ThermTemperature, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   HAmqttSingle("/devices/ESP32", str_sensor);
   
@@ -941,34 +929,9 @@ float ProcessIspindlePacket() {
   dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   HAmqttSingle("/devices/AtmelVolt", str_sensor);
 
+  dtostrf((int) rf95.lastRssi(), 4, 0, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/devices/Node2RSSI", str_sensor);
+  
   return ThermTemperature;
 }
 
-void scanwifi() {
-
-Serial.print("ESP Board MAC Address:  ");  Serial.println(WiFi.macAddress());
-    Serial.println("scan start");
-
-    // WiFi.scanNetworks will return the number of networks found
-    int n = WiFi.scanNetworks();
-    Serial.println("scan done");
-    WiFi.mode(WIFI_MODE_STA);
-    if (n == 0) {
-        Serial.println("no networks found");
-    } else {
-        Serial.print(n);
-        Serial.println(" networks found");
-        for (int i = 0; i < n; ++i) {
-            // Print SSID and RSSI for each network found
-            Serial.print(i + 1);
-            Serial.print(": ");
-            Serial.print(WiFi.SSID(i));
-            Serial.print(" (");
-            Serial.print(WiFi.RSSI(i));
-            Serial.print(")");
-            Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN)?" ":"*");
-            delay(10);
-        }
-    }
-
-}
