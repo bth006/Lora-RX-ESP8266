@@ -1,6 +1,6 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
-// 24 Jan 2021
+// 27 Aug 2021
 //works
 
 /////LEDs
@@ -29,7 +29,9 @@
 #define BUILTIN_BLUE_LED 2
 
 // WiFi access credentials
-#define WIFI_SSID "Penryn" // WiFi SSID
+//#define WIFI_SSID "Penryn" // WiFi SSID
+//#define WIFI_SSID "STARLINK" // WiFi SSID
+#define WIFI_SSID "ASUS" // WiFi SSID
 #define WIFI_PASSWORD "hoooverr" // WiFI Password
 
 //WiFiClient wificlient; // general use client
@@ -230,7 +232,8 @@ Description : Main program loop
 ------------------------------------------------------------------------------*/
 void loop() {
   //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
- 
+
+
   timerWrite(watchdogTimer, 0); // reset timer feed dog
   strip.SetPixelColor(0, greenlow); //power indicator
   strip.Show();
@@ -348,8 +351,8 @@ void _checkWifi_mqtt() {
 
 void reconnectHomeAssistBroker() {
   // Loop a few times until we're reconnected
-  int attempts = 0;
-  int MaxAttempts = 4;
+  int attempts = 1;
+  int MaxAttempts = 2;
   char text1[30];
   char text2[30];
   char text3[30];
@@ -372,16 +375,16 @@ void reconnectHomeAssistBroker() {
     } else {
       Serial.print("Failed, rc=");
       Serial.print(HomeAssistantclient.state());
-      Serial.println(" HA Mqtt try again in 2 seconds");
+      Serial.println(" HA Mqtt try again in 0.5 seconds");
       // Wait  before retrying
-      delay(2000);
+      delay(500);
     }
   }
 }
 void reconnect() {
   // Loop a few times until we're reconnected
-  int attempts = 0;
-  int MaxAttempts = 4;
+  int attempts = 1;
+  int MaxAttempts = 3;
   char text1[30];
   char text2[30];
   char text3[30];
@@ -589,7 +592,7 @@ void AdafruitiomqttSingle(char
   Serial.println(" payload= ");
   Serial.println(value);
   Adafruitioclient.publish(topic, value);
-  delay(2500);
+  delay(500);//was 2500
 }
 
 void HAmqttSingle(char
@@ -603,8 +606,9 @@ void HAmqttSingle(char
   Serial.println(" payload= ");
   Serial.println(value);
   reconnectHomeAssistBroker();
-  HomeAssistantclient.publish(topic, value, true);
-  delay(2500);
+  if (HomeAssistantclient.connected()) {
+    HomeAssistantclient.publish(topic, value, true);
+    delay(200);}//was 2500
 }
 
 void UbidotsSendAll() {
@@ -909,6 +913,10 @@ float ProcessIspindlePacket() {
   float lnR;
   float ThermResistance;
   float ThermTemperature;
+  int lastRSSIlevel;
+  float degreesTilt;
+
+  lastRSSIlevel=(int) rf95.lastRssi();
   delay(1);
   Serial.print("L byte "); Serial.print(rxpayload.capsensor1Lowbyte);Serial.print("Hbyte ");Serial.println(rxpayload.capsensor1Highbyte);
   TemperatureADC = (int) Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte);
@@ -920,17 +928,32 @@ float ProcessIspindlePacket() {
   ThermTemperature = 1 / (ACOEFFICIENT + BCOEFFICIENT * lnR + CCOEFFICIENT * lnR * lnR * lnR) - 273.15;
   Serial.print("Temperature");Serial.println(ThermTemperature);
 
-  dtostrf(ThermTemperature, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-  HAmqttSingle("/devices/ESP32", str_sensor);
+  Serial.print(" tilt= ");
+  Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte));
+  degreesTilt=float(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte))/700;//dividing by 700 to convert to degrees
   
+  
+  dtostrf(degreesTilt, 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/devices/tilt", str_sensor);
+ 
   dtostrf(temperatureDecompress(rxpayload.temperature), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   HAmqttSingle("/devices/AtmelTemp", str_sensor);
   
   dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   HAmqttSingle("/devices/AtmelVolt", str_sensor);
 
-  dtostrf((int) rf95.lastRssi(), 4, 0, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  dtostrf(lastRSSIlevel, 4, 0, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   HAmqttSingle("/devices/Node2RSSI", str_sensor);
+
+  dtostrf(ThermTemperature, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/devices/ESP32", str_sensor);
+  HomeAssistantclient.disconnect();
+  delay(1000);
+  Adafruitioclient.connect(clientId.c_str(), ADAFRUIT_MQTT_CLIENT_NAME, ADAFRUITIOTOKEN);delay(100);
+  AdafruitiomqttSingle("ispindeltemp", str_sensor);delay(100);
+
+  dtostrf(degreesTilt, 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  AdafruitiomqttSingle("ispindeltilt", str_sensor);delay(500);
   
   return ThermTemperature;
 }
