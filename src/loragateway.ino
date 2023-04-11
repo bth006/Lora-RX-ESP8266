@@ -1,7 +1,7 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
-// 27 Aug 2021
-//works
+// 11 april 2023
+//maybe works!!! still testing
 
 /////LEDs
 //0 power LEDalways green
@@ -14,12 +14,18 @@
 //ENABLE FEATURES
 //#define EnableUbidots // whether to use ubidots
 
+#include <Arduino.h>
+#include <esp_task_wdt.h> // https://iotassistant.io/esp32/enable-hardware-watchdog-timer-esp32-arduino-ide/
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <RH_RF95.h> //ver 1.89
 #include "RadioSettings.h"
 #include <ArduinoJson.h>
 #include <NeoPixelBus.h> //https://github.com/Makuna/NeoPixelBus/
+#include "RunningMedian.h"
+#include <AsyncTCP.h>//ota https://randomnerdtutorials.com/esp32-ota-over-the-air-vs-code/
+#include <ESPAsyncWebServer.h>//ota
+#include <AsyncElegantOTA.h>//ota
 
 //PINS
 #define RFM95_CS 18
@@ -28,10 +34,11 @@
 #define PIXEL_PIN1 21
 #define BUILTIN_BLUE_LED 2
 
+
+
 // WiFi access credentials
 //#define WIFI_SSID "Penryn" // WiFi SSID
-//#define WIFI_SSID "STARLINK" // WiFi SSID
-#define WIFI_SSID "ASUS" // WiFi SSID
+#define WIFI_SSID "Starlink" // WiFi SSID
 #define WIFI_PASSWORD "hoooverr" // WiFI Password
 
 //WiFiClient wificlient; // general use client
@@ -40,7 +47,6 @@ WiFiClient wificlientUbidots;
 #endif
 WiFiClient wificlientAdafruitIO;
 WiFiClient homeAssistant;
-
 /****************************************
  * MQTT
  ****************************************/
@@ -94,33 +100,32 @@ void neopixel_clear();
 void rainbow(uint8_t wait);
 void theaterChase(uint32_t color, int wait);
 void theaterChaseRainbow(uint8_t wait, uint8_t pixLenth);
-void interruptReboot(); // reboot if watchdog times out
+//void interruptReboot(); // reboot if watchdog times out
 void makeIFTTTRequest();
 void ProcessTanKPacket();
 float ProcessIspindlePacket();
-RgbColor Wheel();
+RgbColor Wheel(byte WheelPos);
 long batteryVoltageDecompress(byte batvoltage);
 float temperatureDecompress(byte temperature);
 unsigned int Combine2bytes(byte x_high, byte x_low);
 int calculate_tank_level(int sensor1, int sensor2, int sensor3);
-
+void verbose_print_reset_reason(int reason);
+void set_fermentor_temp_led(float temperature);
 /*****************************************/
-
-int tank_level = 0; //derived from multiple sensors
-unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed
-unsigned long timeSinceLastNode1LoraMessage; //time since last lora message rxed
-DynamicJsonBuffer jsonBuffer; // JSON Buffer
-
-struct payloadDataStruct {
-  byte nodeID;
-  byte rssi;
-  byte voltage;
-  byte temperature;
-  byte capsensor1Lowbyte;
-  byte capsensor1Highbyte;
-  byte capsensor2Lowbyte;
-  byte capsensor2Highbyte;
-  byte capsensor3Lowbyte;
+	int tank_level = 0; //derived from multiple sensors	
+unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed	
+unsigned long timeSinceLastNode1LoraMessage; //time since last lora message rxed	
+DynamicJsonBuffer jsonBuffer; // JSON Buffer	
+struct payloadDataStruct {	
+  byte nodeID;	
+  byte rssi;	
+  byte voltage;	
+  byte temperature;	
+  byte capsensor1Lowbyte;	
+  byte capsensor1Highbyte;	
+  byte capsensor2Lowbyte;	
+  byte capsensor2Highbyte;	
+  byte capsensor3Lowbyte;	
   byte capsensor3Highbyte;
 }
 rxpayload;
@@ -143,16 +148,16 @@ const RH_RF95::ModemConfig radiosetting = {
 const uint16_t NUM_PIXELS = 8; // How many pixels you want to drive (could be set individualy)
 NeoPixelBus < NeoGrbFeature, NeoEsp32I2s1800KbpsMethod > strip(NUM_PIXELS, PIXEL_PIN1);
 #define colorSaturation 128 //max255
-RgbColor red(colorSaturation, 0, 0);
-RgbColor redfull(255, 0, 0);
-RgbColor green(0, colorSaturation, 0);
-RgbColor greenlow(0, colorSaturation / 4, 0);
-RgbColor blue(0, 0, colorSaturation);
-RgbColor white(colorSaturation / 2);
-RgbColor pink(colorSaturation, colorSaturation / 3, colorSaturation / 3);
-RgbColor black(0);
-RgbColor orange(colorSaturation * 0.8, colorSaturation * 0.35, 0);
-RgbColor yellow(colorSaturation * 0.75, colorSaturation * 0.75, 0);
+RgbColor red(colorSaturation, 0, 0);	
+RgbColor redfull(255, 0, 0);	
+RgbColor green(0, colorSaturation, 0);	
+RgbColor greenlow(0, colorSaturation / 4, 0);	
+RgbColor blue(0, 0, colorSaturation);	
+RgbColor white(colorSaturation / 2);	
+RgbColor pink(colorSaturation, colorSaturation / 3, colorSaturation / 3);	
+RgbColor black(0);	
+RgbColor orange(colorSaturation * 0.8, colorSaturation * 0.35, 0);	
+RgbColor yellow(colorSaturation * 0.75, colorSaturation * 0.75, 0);	
 
 //IFTT
 const char * resource = "/trigger/water_level/with/key/daSd2eiJFlysvFuIf-QZX8";
@@ -161,9 +166,9 @@ unsigned long startMillis = 0; //used for scheduling IFTTT posts
 unsigned long IFTTinterval = 60 * 30; // interval in seconds between IFTTT posts
 
 //watchdog timer
-hw_timer_t * watchdogTimer = NULL;
-hw_timer_t * timerread = NULL;
-int watchInt = 480000000; //set time in uS must be fed within this time or reboot
+//hw_timer_t * watchdogTimer = NULL;
+//hw_timer_t * timerread = NULL;
+//int watchInt = 480000000; //set time in uS must be fed within this time or reboot
 
 //Thermister constants and varables
 #define NUMSAMPLES 10
@@ -173,11 +178,37 @@ int watchInt = 480000000; //set time in uS must be fed within this time or reboo
 #define RESISTOR 10060
 //long ADCtherm;
 
+//Ispindle Tilt
+RunningMedian TiltSamples = RunningMedian(4);
+
+AsyncWebServer server2(80);//ota
+
+
+
+//Print last reset reason of ESP32
+#ifdef ESP_IDF_VERSION_MAJOR // IDF 4+
+#if CONFIG_IDF_TARGET_ESP32 // ESP32/PICO-D4
+#include "esp32/rom/rtc.h"
+#else 
+#error Target CONFIG_IDF_TARGET is not supported
+#endif
+#else // ESP32 Before IDF 4.0
+#include "rom/rtc.h"
+#endif
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+
+
 /*----------------------------------------------------------------------------
 Function : setup()
 Description :
 ------------------------------------------------------------------------------*/
 void setup() {
+    //setup watchdog
+  esp_task_wdt_init(1200, true); //enable panic so ESP32 restarts, timeout 20 minutes
+  esp_task_wdt_add(NULL); //add current thread to WDT watch
+  
+
+
   delay(400);
   strip.Begin();
   rainbow(2);
@@ -185,22 +216,27 @@ void setup() {
   neopixel_clear();
   strip.SetPixelColor(0, orange); //power indicator
   strip.Show();
-
-  //setup watchdog
-  watchdogTimer = timerBegin(0, 80, true); //timer 0 divisor 80
-  timerAlarmWrite(watchdogTimer, watchInt, false); // set time in uS must be fed within this time or reboot
-  timerAttachInterrupt(watchdogTimer, & interruptReboot, true);
-  timerAlarmEnable(watchdogTimer); // enable interrupt
+  
+  //watchdogTimer = timerBegin(0, 80, true); //timer 0 divisor 80
+  //timerAlarmWrite(watchdogTimer, watchInt, false); // set time in uS must be fed within this time or reboot
+  //timerAttachInterrupt(watchdogTimer, & interruptReboot, true);
+ //timerAlarmEnable(watchdogTimer); // enable interrupt
 
   //client2.setDebug(true); // Uncomment this line to set DEBUG on
   //set up 1HZ pwm on LED
   pinMode(BUILTIN_BLUE_LED, OUTPUT);
-  ledcSetup(0, 1, 8); //pwm channel 0. 1Hz, 8 bit resolution
+  ledcSetup(0, 5000, 8); //pwm channel 0. 5000Hz, 8 bit resolution
   ledcAttachPin(BUILTIN_BLUE_LED, 0); //attach LED to PWN channel 0
   ledcWrite(0, 0); //led off
 
   Serial.begin(115200);
   delay(1000);
+
+  Serial.println("CPU0 reset reason:");
+  verbose_print_reset_reason(rtc_get_reset_reason(0));
+  Serial.println("CPU1 reset reason:");
+  verbose_print_reset_reason(rtc_get_reset_reason(1));
+
    _initLoRa();
   rf95.setModemRegisters( & radiosetting);
   _initWiFi();
@@ -217,13 +253,25 @@ void setup() {
   _checkWifi_mqtt();
   LoraMessageTimer = millis(); //initialise timer (to calculate time since last lora message was received)
   delay(2000);
+
+  dtostrf(rtc_get_reset_reason(0), 4, 0, str_sensor);
   AdafruitiomqttSingle("messages", "booting");
+  AdafruitiomqttSingle("messages", str_sensor);
 
   reconnectHomeAssistBroker();
   //dtostrf(ProcessIspindlePacket(), 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   //HAmqttSingle("/devices/ESP32", str_sensor);
 //ProcessIspindlePacket() ;
  //rf95.printRegisters(); //th
+
+//OTA
+AsyncElegantOTA.begin(&server2);// Start ElegantOTA
+server2.begin();
+Serial.println("HTTP server2 started");
+server2.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Hi! I am ESP32 Lora.");
+  });
+
 }
 
 /*----------------------------------------------------------------------------
@@ -232,9 +280,8 @@ Description : Main program loop
 ------------------------------------------------------------------------------*/
 void loop() {
   //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
-
-
-  timerWrite(watchdogTimer, 0); // reset timer feed dog
+  esp_task_wdt_reset();// reset timer feed dog
+  //timerWrite(watchdogTimer, 0); // reset timer feed dog
   strip.SetPixelColor(0, greenlow); //power indicator
   strip.Show();
 
@@ -655,8 +702,8 @@ void AdafruitSendAll() {
   dtostrf(tank_level, 3, 0, str_sensor);
   AdafruitiomqttSingle("tank_level", str_sensor);
 
-  dtostrf((int) rf95.lastRssi(), 4, 0, str_sensor);
-  AdafruitiomqttSingle("rx-RSSI", str_sensor);
+  //dtostrf((int) rf95.lastRssi(), 4, 0, str_sensor);
+  //AdafruitiomqttSingle("rx-RSSI", str_sensor);
 
   dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 0, str_sensor);
   AdafruitiomqttSingle("voltage", str_sensor);
@@ -757,11 +804,11 @@ void neopixel_clear() {
   strip.Show();
 }
 
-void interruptReboot() {
+/*void interruptReboot() {
   Serial.print("Rebooting .. \n\n");
   //esp_restart_noos();removed jan 2021 because command deprecated
   esp_restart(); // also see https://iotassistant.io/esp32/enable-hardware-watchdog-timer-esp32-arduino-ide/ and https://github.com/espressif/arduino-esp32/issues/2304
-}
+}*/
 
 // Make an HTTP request to the IFTTT web service
 void makeIFTTTRequest() {
@@ -881,9 +928,6 @@ void ProcessTanKPacket() {
     strip.SetPixelColor(3, black);
     strip.Show();
   }
-
-  // Send a reply to sensor
-  //uint8_t outgoingData[] = "{\"Status\" : \"Ack\"}";
   uint8_t ack[1];
   // the acknolement consists of an ack identiferer followed by nodeID
   ack[0] = (uint8_t) 170; //ack identifier 170=10101010
@@ -951,10 +995,65 @@ float ProcessIspindlePacket() {
   delay(1000);
   Adafruitioclient.connect(clientId.c_str(), ADAFRUIT_MQTT_CLIENT_NAME, ADAFRUITIOTOKEN);delay(100);
   AdafruitiomqttSingle("ispindeltemp", str_sensor);delay(100);
+  
+  TiltSamples.add(degreesTilt);
 
-  dtostrf(degreesTilt, 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  dtostrf(TiltSamples.getMedian(), 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   AdafruitiomqttSingle("ispindeltilt", str_sensor);delay(500);
+
+  dtostrf(batteryVoltageDecompress(rxpayload.voltage), 4, 0, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  AdafruitiomqttSingle("ispindelvoltage", str_sensor);delay(500);
+
+  set_fermentor_temp_led(ThermTemperature);
   
   return ThermTemperature;
+}
+
+void verbose_print_reset_reason(int reason)
+{
+  switch ( reason)
+  {
+    case 1  : Serial.println ("Vbat power on reset");break;
+    case 3  : Serial.println ("Software reset digital core");break;
+    case 4  : Serial.println ("Legacy watch dog reset digital core");break;
+    case 5  : Serial.println ("Deep Sleep reset digital core");break;
+    case 6  : Serial.println ("Reset by SLC module, reset digital core");break;
+    case 7  : Serial.println ("Timer Group0 Watch dog reset digital core");break;
+    case 8  : Serial.println ("Timer Group1 Watch dog reset digital core");break;
+    case 9  : Serial.println ("RTC Watch dog Reset digital core");break;
+    case 10 : Serial.println ("Instrusion tested to reset CPU");break;
+    case 11 : Serial.println ("Time Group reset CPU");break;
+    case 12 : Serial.println ("Software reset CPU");break;
+    case 13 : Serial.println ("RTC Watch dog Reset CPU");break;
+    case 14 : Serial.println ("for APP CPU, reseted by PRO CPU");break;
+    case 15 : Serial.println ("Reset when the vdd voltage is not stable");break;
+    case 16 : Serial.println ("RTC Watch dog reset digital core and rtc module");break;
+    default : Serial.println ("NO_MEAN");
+  }
+}
+
+void set_fermentor_temp_led(float temperature)
+{
+  
+ if (temperature <= 25) {
+
+    strip.SetPixelColor(4, blue);
+    strip.Show();
+
+      } //builtin LED flash (pwm channel 0)
+    else if (temperature <= 26.5) {
+    strip.SetPixelColor(4, blue); 
+      strip.Show();
+  } else if (temperature <= 28.5) {
+    //theaterChaseRainbow(2,6);
+    strip.SetPixelColor(4, greenlow); 
+    strip.Show();
+  } else {
+    strip.SetPixelColor(4, red); 
+
+    strip.Show();
+  }
+
+  
 }
 
