@@ -1,7 +1,7 @@
 // Adafruit Feather Huzzah ESP8266 LoRa receiver for data relay to Raspberry Pi IoT Gateway
 // Author : Tanmoy Dutta
-// 11 april 2023
-//maybe works!!! still testing
+// 13 april 2023
+//works!!!
 
 /////LEDs
 //0 power LEDalways green
@@ -20,12 +20,13 @@
 #include <PubSubClient.h>
 #include <RH_RF95.h> //ver 1.89
 #include "RadioSettings.h"
-#include <ArduinoJson.h>
+#include <ArduinoJson.h> // careful https://arduinojson.org/v6/doc/upgrade/
 #include <NeoPixelBus.h> //https://github.com/Makuna/NeoPixelBus/
 #include "RunningMedian.h"
 #include <AsyncTCP.h>//ota https://randomnerdtutorials.com/esp32-ota-over-the-air-vs-code/
 #include <ESPAsyncWebServer.h>//ota
 #include <AsyncElegantOTA.h>//ota
+#include "AsyncJson.h"//for web server
 
 //PINS
 #define RFM95_CS 18
@@ -77,6 +78,8 @@ char AdafruitiomqttBroker[] = "io.adafruit.com";
 char payload[100];
 char topic[150];
 char str_sensor[10];
+char string1[35];//web
+char string2[10];//web
 
 #if defined(EnableUbidots)
 PubSubClient Ubidotsclient(wificlientUbidots);
@@ -111,10 +114,12 @@ unsigned int Combine2bytes(byte x_high, byte x_low);
 int calculate_tank_level(int sensor1, int sensor2, int sensor3);
 void verbose_print_reset_reason(int reason);
 void set_fermentor_temp_led(float temperature);
+
 /*****************************************/
-	int tank_level = 0; //derived from multiple sensors	
+int tank_level = 0; //derived from multiple sensors	
 unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed	
 unsigned long timeSinceLastNode1LoraMessage; //time since last lora message rxed	
+float Fermenter_temperature = 1.11;
 DynamicJsonBuffer jsonBuffer; // JSON Buffer	
 struct payloadDataStruct {	
   byte nodeID;	
@@ -268,9 +273,28 @@ void setup() {
 AsyncElegantOTA.begin(&server2);// Start ElegantOTA
 server2.begin();
 Serial.println("HTTP server2 started");
+/*server2.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Hi! I am ESP32 Lora.22");
+  });*/
+dtostrf(Fermenter_temperature, 4, 3, str_sensor); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+
 server2.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Hi! I am ESP32 Lora.");
+    request->send(200, "text/plain", str_sensor);
   });
+
+delay(2000);
+
+dtostrf(Fermenter_temperature, 4, 2, string1); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+dtostrf(esp_timer_get_time()/60000000, 4, 0, string2);//uptime in minutes
+strcat(string1, "aa");
+strcat(string1, string2);
+
+
+
+//server2.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+  //  request->send(200, "text/plain", string1);
+  //});
+
 
 }
 
@@ -284,7 +308,6 @@ void loop() {
   //timerWrite(watchdogTimer, 0); // reset timer feed dog
   strip.SetPixelColor(0, greenlow); //power indicator
   strip.Show();
-
   if (millis() - LoraMessageTimer >= 1800000) { //turn led on if no lora Node1 message for 30 minutes
     strip.SetPixelColor(6, blue);
   } else
@@ -294,6 +317,8 @@ void loop() {
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
+
+
 
 
     if (rf95.recv(buf, & len)) {
@@ -316,7 +341,7 @@ void loop() {
       if (rxpayload.nodeID == 1) {
         ProcessTanKPacket();
       } else if (rxpayload.nodeID == 2) {
-        ProcessIspindlePacket();
+        Fermenter_temperature = ProcessIspindlePacket();
       } else Serial.println("NodeID not found");
 
     } else {
@@ -331,6 +356,7 @@ void loop() {
     startMillis = millis();
     makeIFTTTRequest();
   }
+  
   delay(8000);
 
 }
@@ -1057,3 +1083,22 @@ void set_fermentor_temp_led(float temperature)
   
 }
 
+
+
+
+/* - framework-arduinoespressif32 @ 3.10006.210326 (1.0.6) 
+ - tool-esptoolpy @ 1.30100.210531 (3.1.0) 
+ - toolchain-xtensa32 @ 2.50200.97 (5.2.0)
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 34 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- RunningMedian @ 0.1.15
+|-- ArduinoJson @ 5.13.3
+|-- NeoPixelBus @ 2.3.4
+|   |-- SPI @ 1.0
+|-- PubSubClient @ 2.6
+|-- RadioHead @ 1.89
+|   |-- SPI @ 1.0
+|-- WiFi @ 1.0*/
