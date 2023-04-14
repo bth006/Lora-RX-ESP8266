@@ -1,4 +1,4 @@
-// 13 april 2023
+// 14 april 2023
 //works!!!
 
 /////LEDs
@@ -61,7 +61,7 @@ char AdafruitiomqttBroker[] = "io.adafruit.com";
 char payload[100];
 char topic[150];
 char str_sensor[10];
-char string1[35] = "";//web
+char string1[85] = "";//web
 char string2[10];//web
 
 PubSubClient Adafruitioclient(wificlientAdafruitIO);
@@ -91,6 +91,7 @@ unsigned int Combine2bytes(byte x_high, byte x_low);
 int calculate_tank_level(int sensor1, int sensor2, int sensor3);
 void verbose_print_reset_reason(int reason);
 void set_fermentor_temp_led(float temperature);
+void make_web_string();
 
 /*****************************************/
 //VARABLES
@@ -187,7 +188,7 @@ void setup() {
   strip.Show();
   
   //client2.setDebug(true); // Uncomment this line to set DEBUG on
-  //set up 1HZ pwm on LED
+  //set up 5000HZ pwm on LED
   pinMode(BUILTIN_BLUE_LED, OUTPUT);
   ledcSetup(0, 5000, 8); //pwm channel 0. 5000Hz, 8 bit resolution
   ledcAttachPin(BUILTIN_BLUE_LED, 0); //attach LED to PWN channel 0
@@ -245,6 +246,7 @@ void loop() {
   strip.Show();
   if (millis() - LoraMessageTimer >= 1800000) { //turn led on if no lora Node1 message for 30 minutes
     strip.SetPixelColor(6, blue);
+    strip.SetPixelColor(4, black);//ferm temperature LED
   } else
     strip.SetPixelColor(6, black);
 
@@ -255,6 +257,8 @@ void loop() {
 
     if (rf95.recv(buf, & len)) {
       delay(10);
+      timeSinceLastNode1LoraMessage = millis() - LoraMessageTimer;
+      LoraMessageTimer = millis(); //reset timer (to calculate time since last lora message was received)
       char bufChar[len];
       for (int i = 0; i < len; i++) {
         bufChar[i] = char(buf[i]);
@@ -282,17 +286,14 @@ void loop() {
 
   //Adafruitioclient.loop(); //Mqtt
   
-  //web
-  dtostrf(Fermenter_temperature, 4, 2, string1); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
-  dtostrf(esp_timer_get_time()/60000000, 9, 0, string2);//uptime in minutes
-  strcat(string1, " <--temp   uptime--> ");
-  strcat(string1, string2);
-  //WebSerial.println(string1);
+  make_web_string(); //meke string that esp32 webpage shows
  
   
+  //WebSerial.println(string1);
+   
   delay(8000);
-
 }
+
 
 void donothing() {}
 
@@ -343,9 +344,15 @@ void _checkWifi_mqtt() {
       strip.Show();
     }
   }
-
+  if (!HomeAssistantclient.connected()) {
+    Serial.println("reconecting/connecting HA mqtt");
+    reconnect();
+    if (!HomeAssistantclient.connected()) {
+      strip.SetPixelColor(7, red); //turn error LED on
+    } else strip.SetPixelColor(7, red); //turn error LED off
+  }
+  strip.Show();
 }
-
 void reconnectHomeAssistBroker() {
   // Loop a few times until we're reconnected
   int attempts = 1;
@@ -646,8 +653,7 @@ void neopixel_clear() {
 
 
 void ProcessTanKPacket() {
-  timeSinceLastNode1LoraMessage = millis() - LoraMessageTimer;
-  LoraMessageTimer = millis(); //reset timer (to calculate time since last lora message was received)
+  
   tank_level = calculate_tank_level((int) Combine2bytes(rxpayload.capsensor1Highbyte, rxpayload.capsensor1Lowbyte), (int) Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte), (int) Combine2bytes(rxpayload.capsensor3Highbyte, rxpayload.capsensor3Lowbyte));
 
   //rxpayload.voltage=batteryVoltageDecompress(rxpayload.voltage);
@@ -752,7 +758,7 @@ float ProcessIspindlePacket() {
   Serial.print(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte));
   degreesTilt=float(Combine2bytes(rxpayload.capsensor2Highbyte, rxpayload.capsensor2Lowbyte))/700;//dividing by 700 to convert to degrees
   
-  
+  _checkWifi_mqtt();
   dtostrf(degreesTilt, 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
   HAmqttSingle("/devices/tilt", str_sensor);
  
@@ -832,6 +838,21 @@ void set_fermentor_temp_led(float temperature)
 
   
 }
+
+void make_web_string()  {
+ dtostrf(Fermenter_temperature, 4, 2, string1); /* 4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  strcat(string1, " <--temp, uptime--> ");
+  dtostrf(esp_timer_get_time()/60000000, 1, 0, string2);//uptime in minutes
+  strcat(string1, string2);
+  dtostrf(rtc_get_reset_reason(0), 2, 0, string2);//uptime in minutes
+  strcat(string1, ", reset reason--> ");
+  strcat(string1, string2);   
+  dtostrf((millis() - LoraMessageTimer)/60000, 2, 0, string2);//
+  strcat(string1, ", time since lora msg--> ");
+  strcat(string1, string2);
+  
+}
+
 
 /*
 Dependency Graph
