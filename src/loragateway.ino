@@ -21,9 +21,11 @@
 #include "RunningMedian.h"
 #include <AsyncTCP.h>//ota https://randomnerdtutorials.com/esp32-ota-over-the-air-vs-code/
 #include <ESPAsyncWebServer.h>//ota
-#include <AsyncElegantOTA.h>//ota
+#include <AsyncElegantOTA.h>//ota   eg http://192.168.1.12/update
 #include "AsyncJson.h"//for web server
 #include <WebSerial.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 //PINS
 #define RFM95_CS 18
@@ -31,7 +33,12 @@
 #define RFM95_INT 26
 #define PIXEL_PIN1 21
 #define BUILTIN_BLUE_LED 2
+#define ADAFRUIT_SCL 22//adfruit BME sensor i2c scl=22 sda=23
+#define ADAFRUIT_SDA 23 
 
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+Adafruit_BME280 bme; // I2C
 
 // WiFi access credentials
 //#define WIFI_SSID "Penryn" // WiFi SSID
@@ -92,9 +99,12 @@ int calculate_tank_level(int sensor1, int sensor2, int sensor3);
 void verbose_print_reset_reason(int reason);
 void set_fermentor_temp_led(float temperature);
 void make_web_string();
+void readBME280();
+void scanic2();
 
 /*****************************************/
 //VARABLES
+int loopmod =0; //used for every n times through loop
 int tank_level = 0; //derived from multiple sensors	
 unsigned long LoraMessageTimer; //used to calculate time since last lora message rxed	
 unsigned long timeSinceLastNode1LoraMessage; //time since last lora message rxed	
@@ -135,8 +145,9 @@ NeoPixelBus < NeoGrbFeature, NeoEsp32I2s1800KbpsMethod > strip(NUM_PIXELS, PIXEL
 RgbColor red(colorSaturation, 0, 0);	
 RgbColor redfull(255, 0, 0);	
 RgbColor green(0, colorSaturation, 0);	
-RgbColor greenlow(0, colorSaturation / 4, 0);	
+RgbColor greenlow(0, colorSaturation / 16, 0);	
 RgbColor blue(0, 0, colorSaturation);	
+RgbColor bluelow(0, 0, colorSaturation / 8);	
 RgbColor white(colorSaturation / 2);	
 RgbColor pink(colorSaturation, colorSaturation / 3, colorSaturation / 3);	
 RgbColor black(0);	
@@ -232,6 +243,30 @@ server2.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
   });
 
 delay(2000);
+
+Wire.setPins(ADAFRUIT_SDA , ADAFRUIT_SCL);
+//scanic2();
+unsigned status;
+status = bme.begin(0x76);  
+    // You can also pass in a Wire library object like &Wire2
+    // status = bme.begin(0x76, &Wire2)
+WebSerial.print("bme status"); WebSerial.println(status);     
+if (!status) {
+        WebSerial.println("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
+        WebSerial.print("SensorID was: 0x"); Serial.println(bme.sensorID(),16);
+        WebSerial.print("        ID of 0xFF probably means a bad address, a BMP 180 or BMP 085\n");
+        WebSerial.print("   ID of 0x56-0x58 represents a BMP 280,\n");
+        WebSerial.print("        ID of 0x60 represents a BME 280.\n");
+        WebSerial.print("        ID of 0x61 represents a BME 680.\n");
+        delay(10);
+ }
+
+WebSerial.println(bme.readPressure());
+
+//bme.setSampling(Adafruit_BME280::MODE_SLEEP);
+//bme.takeForcedMeasurement();
+
+WebSerial.print("setup complete ");
 }
 
 /*----------------------------------------------------------------------------
@@ -240,12 +275,13 @@ Description : Main program loop
 ------------------------------------------------------------------------------*/
 void loop() {
 
-  //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");
+  //client.publish("/v1.6/devices/esp","{\"voltage\":2660,\"rssi\":0,\"temp\":18}");Type here
+  
   esp_task_wdt_reset();// reset timer feed dog
   strip.SetPixelColor(0, greenlow); //power indicator
   strip.Show();
   if (millis() - LoraMessageTimer >= 1800000) { //turn led on if no lora Node1 message for 30 minutes
-    strip.SetPixelColor(6, blue);
+    strip.SetPixelColor(6, bluelow);
     strip.SetPixelColor(4, black);//ferm temperature LED
   } else
     strip.SetPixelColor(6, black);
@@ -271,7 +307,13 @@ void loop() {
 
       memcpy( & rxpayload, buf, sizeof(rxpayload));
       Serial.println("packet rx with nodeid ");Serial.println(rxpayload.nodeID);
-      
+      WebSerial.print("nodeID "); WebSerial.println(rxpayload.nodeID);
+      WebSerial.print("rssi ");WebSerial.println(rf95.lastRssi());
+      WebSerial.print("temp ");WebSerial.println(rxpayload.temperature);
+
+
+
+
       if (rxpayload.nodeID == 1) {
         ProcessTanKPacket();
       } else if (rxpayload.nodeID == 2) {
@@ -290,7 +332,10 @@ void loop() {
  
   
   //WebSerial.println(string1);
-   
+  if (++loopmod == 35) { //approx every 5 minutes
+       readBME280();
+       loopmod = 0;
+   } 
   delay(8000);
 }
 
@@ -302,9 +347,9 @@ Function : _initWiFi()
 Description : Connect to WiFi access point
 ------------------------------------------------------------------------------*/
 void _initWiFi() {
-
+  WiFi.setHostname("esp32_loragateway"); //define hostname
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
- 
+
   Serial.println("WiFi Connecting");
   for (int waiting = 0; waiting <= 8; waiting++) {
     
@@ -334,6 +379,7 @@ void _checkWifi_mqtt() {
     delay(1000);
   }
   strip.SetPixelColor(7, black);
+  
   strip.Show();
  
   if (!Adafruitioclient.connected()) {
@@ -346,10 +392,10 @@ void _checkWifi_mqtt() {
   }
   if (!HomeAssistantclient.connected()) {
     Serial.println("reconecting/connecting HA mqtt");
-    reconnect();
+    reconnectHomeAssistBroker();
     if (!HomeAssistantclient.connected()) {
       strip.SetPixelColor(7, red); //turn error LED on
-    } else strip.SetPixelColor(7, red); //turn error LED off
+    } else {strip.SetPixelColor(7, black);} //turn error LED off
   }
   strip.Show();
 }
@@ -819,12 +865,12 @@ void set_fermentor_temp_led(float temperature)
   
  if (temperature <= 25) {
 
-    strip.SetPixelColor(4, blue);
+    strip.SetPixelColor(4, bluelow);
     strip.Show();
 
       } //builtin LED flash (pwm channel 0)
     else if (temperature <= 26.5) {
-    strip.SetPixelColor(4, blue); 
+    strip.SetPixelColor(4, bluelow); 
       strip.Show();
   } else if (temperature <= 28.5) {
     //theaterChaseRainbow(2,6);
@@ -883,3 +929,54 @@ Dependency Graph
 |-- WiFi @ 2.0.0
 */
 
+void readBME280() {
+  _checkWifi_mqtt();
+  dtostrf(bme.readTemperature(), 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/devices/loragateway/bme280/temp", str_sensor);
+
+  dtostrf(bme.readPressure(), 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/devices/loragateway/bme280/pressure", str_sensor);
+   WebSerial.print("humidity");
+   WebSerial.println(str_sensor);
+
+
+  dtostrf(bme.readHumidity(), 4, 3, str_sensor); /*  4 is mininum width, 2 is precision; float value is copied onto str_sensor*/
+  HAmqttSingle("/devices/loragateway/bme280/humidity", str_sensor);
+   WebSerial.print("humidity");
+   WebSerial.println(str_sensor);
+
+}
+
+void scanic2() {
+  delay(5000);  
+  byte error, address;
+  int nDevices;
+  WebSerial.println("Scanning...");
+  nDevices = 0;
+  for(address = 1; address < 127; address++ ) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+    if (error == 0) {
+      WebSerial.print("I2C device found at address 0x");
+      if (address<16) {
+        WebSerial.print("0");
+      }
+      WebSerial.println(address);
+      nDevices++;
+    }
+    else if (error==4) {
+      WebSerial.print("Unknow error at address 0x");
+      if (address<16) {
+        WebSerial.print("0");
+      }
+      WebSerial.println(address);
+    }    
+  }
+  if (nDevices == 0) {
+    WebSerial.println("No I2C devices found");
+  }
+  else {
+    WebSerial.println("done");
+  }
+  delay(5000);          
+}
